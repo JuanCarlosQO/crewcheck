@@ -29,6 +29,10 @@
       ],
       "baselinePct": 20,
       "jumpPct": 50,
+      "camera": {
+        "minQuality": 60,
+        "_note": "App rule: a camera reading (fingertip photoplethysmography) needs a signal-quality score of at least 60/100, otherwise it becomes 'Measure again'. Not a clinical threshold."
+      },
       "hazard": "Gravity fields",
       "whatIs": "How many times your heart beats in one minute while you rest.",
       "howToMeasure": [

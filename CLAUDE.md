@@ -16,7 +16,9 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 | `index.html` | Shell: aurora background, dock navigation, HUD with live ECG |
 | `css/styles.css` | Design tokens (light and dark), all components and animations |
 | `js/main.js` | Views (`#today`, `#checkin`, `#trends`, `#future`, `#data`), router, events |
-| `js/rules.js` | Pure health rules: missing → plausible → jump → ranges → personal baseline → streak |
+| `js/rules.js` | Pure health rules: missing → plausible → camera signal quality → jump → ranges → personal baseline → streak |
+| `js/ppg.js` | Camera heart rate signal processing (pure, tested): resample, band-pass, peaks, quality score |
+| `js/camera.js` | Camera heart-rate sheet: `getUserMedia`, torch, finger detection, live waveform |
 | `js/forecast.js` | Future body projection (bone loss = published monthly rate × months) |
 | `js/hazards.js` | The five NASA hazards, mission dose, career band, storm alert |
 | `js/body.js` | Holographic body (SVG slices, scan beam, zones, callouts) |
@@ -34,11 +36,11 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 
 ## Status (11 November 2026)
 
-Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, 22 passing tests.
+Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, camera heart rate (code done and tested with a simulated camera; still to test on real phones), 39 passing tests.
 
 ## Next tasks
 
-1. **Camera heart-rate input (agreed next feature).** In the Log view, a "Measure with camera" button for heart rate: fingertip over the phone camera with the torch on, read the red-channel brightness from `getUserMedia` frames, band-pass and count peaks over about 20 seconds (photoplethysmography). Show a live waveform on a holo screen, a signal-quality score, and send the result through the normal rules so a poor signal ends as "Measure again". Label it as an estimate that is less accurate than a medical sensor. It cannot run inside the claude.ai artifact preview (camera blocked), only on GitHub Pages over https; test on a real phone.
+1. **Camera heart-rate input — built, needs real-phone testing.** Test on Android Chrome and iPhone Safari over GitHub Pages; compare against a finger sensor and tune `heart_rate.camera.minQuality` and `isFingerFrame` if needed. Original brief: in the Log view, a "Measure with camera" button for heart rate: fingertip over the phone camera with the torch on, read the red-channel brightness from `getUserMedia` frames, band-pass and count peaks over about 20 seconds (photoplethysmography). Show a live waveform on a holo screen, a signal-quality score, and send the result through the normal rules so a poor signal ends as "Measure again". Label it as an estimate that is less accurate than a medical sensor. It cannot run inside the claude.ai artifact preview (camera blocked), only on GitHub Pages over https; test on a real phone.
 2. Load the research team's verified ranges into `data/indicators.json` (set `verified: true` and `source`) and their projection rates into `data/forecast.json` (`effectFactor`, muscle rate).
 3. Replace `DEMO_KEY` in `fetchSpaceWeather` (`js/main.js`) with the team's own free key from api.nasa.gov.
 4. Confirm with the local event whether code written before 14 November is allowed; if not, the hackathon build starts in a fresh repository.

@@ -3,7 +3,8 @@
 //
 // Each reading goes through four checks, in this order:
 //   1. Is there a reading at all?                 -> "missing"
-//   2. Can the value be real? Did it jump a lot?  -> "verify" (re-measure first)
+//   2. Can the value be real? Was the signal good  -> "verify" (re-measure first)
+//      enough? Did it jump a lot?
 //   3. Where does it fall in the ranges?          -> "green" | "yellow" | "red"
 //   4. Is it unusual for this astronaut?          -> green can become "yellow"
 // Mood also has a streak rule: several yellow days in a row become red.
@@ -65,8 +66,9 @@ export function formatValue(ind, value) {
  * @param value     number, or {sys, dia} for blood pressure, or null
  * @param history   earlier evaluations of the same indicator, oldest first
  * @param confirmed true when the astronaut re-measured and confirmed a big jump
+ * @param measured  how the value was taken, e.g. { method: "camera", quality: 0-100 }
  */
-export function evaluate(ind, value, history = [], confirmed = false) {
+export function evaluate(ind, value, history = [], confirmed = false, measured = null) {
   if (isMissing(ind, value)) {
     return { status: "missing", trust: "missing", reasons: ["No reading yet."] };
   }
@@ -75,6 +77,15 @@ export function evaluate(ind, value, history = [], confirmed = false) {
       status: "verify",
       trust: "impossible",
       reasons: [`${formatValue(ind, value)} ${ind.unit} is outside what a human body can show. It is probably a typing or sensor error. Measure again.`],
+    };
+  }
+
+  const cam = measured?.method === "camera" ? ind.camera : null;
+  if (cam && !(measured.quality >= cam.minQuality)) {
+    return {
+      status: "verify",
+      trust: "low_signal",
+      reasons: [`Camera signal too weak (quality ${Math.round(measured.quality ?? 0)}/100, needs ${cam.minQuality}). Measure again with the camera or a medical sensor.`],
     };
   }
 
@@ -121,13 +132,15 @@ export function evaluate(ind, value, history = [], confirmed = false) {
     }
   }
 
+  if (cam) reasons.push(`Camera estimate (signal quality ${Math.round(measured.quality)}/100). Less accurate than a medical sensor.`);
+
   return { status, trust: "ok", num, range: rangeStatus(ind, value), reasons };
 }
 
 /**
  * Evaluate every indicator for every day.
  * @param indicators list from data/indicators.json
- * @param entries    [{ day, values: { id: value }, confirmed: { id: true } }], sorted by day
+ * @param entries    [{ day, values: { id: value }, confirmed: { id: true }, measured: { id: {...} } }], sorted by day
  * @returns          [{ day, results: { id: { value, status, trust, reasons } } }]
  */
 export function evaluateMission(indicators, entries) {
@@ -136,8 +149,8 @@ export function evaluateMission(indicators, entries) {
     const results = {};
     for (const ind of indicators) {
       const value = entry.values[ind.id] ?? null;
-      const res = evaluate(ind, value, history[ind.id], Boolean(entry.confirmed?.[ind.id]));
-      const full = { ...res, value, num: res.num ?? primary(ind, value) };
+      const res = evaluate(ind, value, history[ind.id], Boolean(entry.confirmed?.[ind.id]), entry.measured?.[ind.id] ?? null);
+      const full = { ...res, value, num: res.num ?? primary(ind, value), measured: entry.measured?.[ind.id] ?? null };
       results[ind.id] = full;
       history[ind.id].push(full);
     }
