@@ -1,0 +1,162 @@
+{
+  "_about": "Daily health indicators. Ranges are general adult clinical references used as a starting point. Every entry with \"verified\": false must be checked by the research team and given a source before submission.",
+  "indicators": [
+    {
+      "id": "heart_rate",
+      "name": "Resting heart rate",
+      "unit": "bpm",
+      "system": "heart",
+      "decimals": 0,
+      "plausible": [25, 230],
+      "green": [[60, 100]],
+      "yellow": [[50, 59.99], [100.01, 120]],
+      "baselinePct": 20,
+      "jumpPct": 50,
+      "hazard": "Gravity fields",
+      "whatIs": "How many times your heart beats in one minute while you rest.",
+      "howToMeasure": ["Rest seated or strapped in for 5 minutes.", "Put on the chest strap or finger sensor.", "Stay still and read the value after 30 seconds."],
+      "actions": {
+        "yellow": "Rest for 10 minutes, drink water and measure again. If it stays outside the normal range, note it for your next private medical conference.",
+        "red": "Stop strenuous work, rest and measure again in 5 minutes. If it is still red, tell your crew medical officer and contact the flight surgeon."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "blood_pressure",
+      "name": "Blood pressure",
+      "unit": "mmHg",
+      "system": "heart",
+      "type": "bp",
+      "plausibleSys": [60, 260],
+      "plausibleDia": [30, 160],
+      "greenMax": [119, 79],
+      "yellowMax": [139, 89],
+      "baselinePct": 15,
+      "jumpPct": 35,
+      "hazard": "Gravity fields",
+      "whatIs": "The pressure of blood on your artery walls: the top number when your heart beats, the bottom number between beats.",
+      "howToMeasure": ["Sit or stay strapped in for 5 minutes without talking.", "Put the cuff on your upper arm at heart level.", "Press start and stay still until it finishes."],
+      "actions": {
+        "yellow": "Measure again after 10 minutes of rest. Reduce salt in your next meals and keep your exercise session.",
+        "red": "Rest and measure again in 5 minutes. If it is still red, tell your crew medical officer and contact the flight surgeon."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "temperature",
+      "name": "Body temperature",
+      "unit": "°C",
+      "system": "body",
+      "decimals": 1,
+      "plausible": [30, 43],
+      "green": [[36.1, 37.2]],
+      "yellow": [[35.5, 36.09], [37.21, 38.0]],
+      "baselinePct": null,
+      "jumpPct": 5,
+      "hazard": "Hostile closed environment",
+      "whatIs": "How warm your body core is. A rise can be a sign that your body is fighting an infection.",
+      "howToMeasure": ["Wait 15 minutes after eating, drinking or exercising.", "Use the digital thermometer as shown in its card.", "Read the value when it beeps."],
+      "actions": {
+        "yellow": "Drink water, rest and measure again in one hour. Note any other symptoms such as a sore throat or tiredness.",
+        "red": "Rest, isolate from shared food areas if possible and tell your crew medical officer. Contact the flight surgeon."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "glucose",
+      "name": "Fasting blood sugar",
+      "unit": "mg/dL",
+      "system": "metabolism",
+      "decimals": 0,
+      "plausible": [20, 600],
+      "green": [[70, 99]],
+      "yellow": [[54, 69.99], [99.01, 125]],
+      "baselinePct": 20,
+      "jumpPct": 60,
+      "hazard": "Hostile closed environment",
+      "whatIs": "How much sugar is in your blood before breakfast. Your body uses it for energy.",
+      "howToMeasure": ["Measure in the morning before eating.", "Clean your fingertip and use a new lancet.", "Put the drop of blood on the strip and read the meter."],
+      "actions": {
+        "yellow": "If low, eat a small snack with sugar and measure again in 15 minutes. If high, review your meals and measure again tomorrow.",
+        "red": "If low, eat fast sugar now and measure again in 15 minutes. If high or still low, tell your crew medical officer and contact the flight surgeon."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "spo2",
+      "name": "Blood oxygen",
+      "unit": "%",
+      "system": "lungs",
+      "decimals": 0,
+      "plausible": [50, 100],
+      "green": [[95, 100]],
+      "yellow": [[92, 94.99]],
+      "baselinePct": null,
+      "jumpPct": 10,
+      "hazard": "Hostile closed environment",
+      "whatIs": "How much oxygen your blood is carrying. It shows how well your lungs are working and how good the cabin air is.",
+      "howToMeasure": ["Warm your hand and remove any nail polish.", "Clip the sensor on your finger.", "Keep still and read the value after 30 seconds."],
+      "actions": {
+        "yellow": "Breathe slowly for 2 minutes and measure again. Check the cabin carbon dioxide reading on the environment panel.",
+        "red": "Measure again on another finger. If it is still red, tell your crew medical officer, check the cabin air and contact the flight surgeon."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "sleep",
+      "name": "Sleep",
+      "unit": "h",
+      "system": "mind",
+      "decimals": 1,
+      "plausible": [0, 16],
+      "green": [[7, 9]],
+      "yellow": [[6, 6.99], [9.01, 16]],
+      "baselinePct": null,
+      "jumpPct": null,
+      "hazard": "Isolation and confinement",
+      "whatIs": "How many hours you slept in your last sleep period. Sleep keeps your attention and mood steady.",
+      "howToMeasure": ["Check the sleep time on your wrist monitor.", "Or write down when you fell asleep and woke up."],
+      "actions": {
+        "yellow": "Dim the lights one hour before your next sleep period and avoid screens. Use the eye mask and ear plugs.",
+        "red": "Tell your crew medical officer. Ask mission control whether your schedule allows extra rest before critical tasks."
+      },
+      "verified": false,
+      "source": null
+    },
+    {
+      "id": "mood",
+      "name": "Mood",
+      "unit": "/5",
+      "system": "mind",
+      "decimals": 0,
+      "plausible": [1, 5],
+      "green": [[4, 5]],
+      "yellow": [[3, 3]],
+      "streakRed": { "status": "yellow", "days": 3 },
+      "baselinePct": null,
+      "jumpPct": null,
+      "hazard": "Isolation and confinement",
+      "whatIs": "How you feel today, from 1 (very bad) to 5 (very good). Long missions far from home can wear down your mood.",
+      "howToMeasure": ["Take a moment to think about how you feel right now.", "Pick the face that matches it best."],
+      "actions": {
+        "yellow": "Schedule a call with family or friends and do something you enjoy today. Talk to a crewmate.",
+        "red": "Your mood has been low for several days. Request a private conference with the flight psychologist."
+      },
+      "verified": false,
+      "source": null
+    }
+  ],
+  "systems": [
+    { "id": "mind", "name": "Mind & sleep", "about": "Your brain controls attention, memory and mood. Isolation, noise and changing light cycles can disturb sleep and mood on long missions." },
+    { "id": "heart", "name": "Heart & circulation", "about": "Your heart pumps blood through your body. Without gravity, fluids shift toward your head and your heart does not need to work as hard, so it can lose fitness." },
+    { "id": "lungs", "name": "Lungs & breathing", "about": "Your lungs bring oxygen in and carbon dioxide out. The closed cabin air must be kept clean for them to work well." },
+    { "id": "metabolism", "name": "Blood sugar & energy", "about": "Your body turns food into energy. Diet, sleep and exercise in space all change how your body handles sugar." },
+    { "id": "body", "name": "Whole body & immunity", "about": "Your immune system fights infections. Radiation, stress and a closed environment can weaken it during missions." },
+    { "id": "bones", "name": "Bones & muscle", "about": "Without gravity, bones and muscles carry less weight and slowly weaken. They are not measured daily: see Future body." }
+  ]
+}

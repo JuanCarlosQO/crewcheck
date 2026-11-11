@@ -1,0 +1,72 @@
+{
+  "_about": "Rates used by the Future body view. A rate is only used when it has a source. Systems without a published number are shown as qualitative risks. The research team fills in the pending entries.",
+  "validatedMonths": 6,
+  "missions": [
+    { "id": "iss", "name": "Space station", "days": 180 },
+    { "id": "moon", "name": "Lunar base stay", "days": 30 },
+    { "id": "mars", "name": "Mars round trip", "days": 900 }
+  ],
+  "systems": [
+    {
+      "id": "bones",
+      "name": "Bones (spine & hip)",
+      "kind": "quantified",
+      "measure": "Bone density compared with before flight",
+      "unit": "%",
+      "lossPerMonth": [1.0, 1.5],
+      "lossSource": {
+        "label": "NASA: Risk of Spaceflight-Induced Bone Changes",
+        "url": "https://www.nasa.gov/reference/risk-of-spaceflight-induced-bone-changes/",
+        "quote": "Weight-bearing bones such as the spine and hips lose 1% to 1.5% of their density each month during four-to-six-month missions."
+      },
+      "countermeasure": {
+        "name": "Resistive exercise + good diet",
+        "effectFactor": null,
+        "note": "NASA reports that astronauts who used the advanced resistive exercise device with an improved diet kept more of their bone density. No exact figure is published yet, so the projection shows the full possible range: from no loss up to the rate without exercise.",
+        "source": {
+          "label": "NASA study (Smith et al., 2012), reported by OHS Online",
+          "url": "https://ohsonline.com/articles/2012/08/27/nasa-more-hopeful-on-astronaut-fitness.aspx"
+        }
+      },
+      "displayBands": { "yellowFrom": 3, "redFrom": 8, "note": "Colour bands chosen by this app to make change visible. They are not clinical thresholds." }
+    },
+    {
+      "id": "muscle",
+      "name": "Muscles",
+      "kind": "qualitative",
+      "summary": "On the space station, crew who follow their exercise schedule return on average with minimal losses of muscle size, strength and endurance. Exploration vehicles may not fit the same exercise equipment.",
+      "source": {
+        "label": "NASA: Risk of impaired performance due to reduced muscle size, strength and endurance",
+        "url": "https://www.nasa.gov/directorates/esdmd/hhp/risk-of-impaired-performance-due-to-reduced-muscle-size-strength-and-endurance/"
+      },
+      "pending": "Monthly rate without exercise"
+    },
+    {
+      "id": "heart",
+      "name": "Heart & circulation",
+      "kind": "qualitative",
+      "summary": "Fluids shift toward the head in weightlessness and the heart works less, which can reduce its fitness over long missions.",
+      "source": null,
+      "pending": "Source and size of the change"
+    },
+    {
+      "id": "eyes",
+      "name": "Eyes & brain",
+      "kind": "qualitative",
+      "summary": "Some astronauts develop changes in the eye and optic nerve on long missions, known as spaceflight-associated neuro-ocular syndrome (SANS).",
+      "source": null,
+      "pending": "Source and how often it appears"
+    },
+    {
+      "id": "mind",
+      "name": "Mind & sleep",
+      "kind": "qualitative",
+      "summary": "Isolation, confinement and distance from Earth can affect sleep, mood and teamwork as a mission gets longer.",
+      "source": {
+        "label": "NASA: The five hazards of human spaceflight",
+        "url": "https://www.nasa.gov/hrp/hazards"
+      },
+      "pending": "Measured effects on long missions"
+    }
+  ]
+}
