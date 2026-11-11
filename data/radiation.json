@@ -1,0 +1,17 @@
+{
+  "_about": "Radiation reference values. Every number here has a source.",
+  "careerLimitMSv": 600,
+  "careerLimitSource": {
+    "label": "NASA Office of the Chief Health and Medical Officer: Radiation Protection technical brief (NASA-STD-3001)",
+    "url": "https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf",
+    "quote": "Career effective dose shall be less than 600 mSv."
+  },
+  "displayBands": { "yellowFrom": 0.5, "redFrom": 0.8, "note": "Colour bands on the career bar are chosen by this app. The only official number is the 600 mSv limit." },
+  "shelter": "Go to the storm shelter: the crew quarters with extra water shielding. Rearrange water containers around your sleeping bag if the shelter is not ready. Stay until mission control or the dosimeter alarm clears.",
+  "shelterSource": {
+    "label": "NASA Radiation Protection technical brief",
+    "url": "https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf"
+  },
+  "liveDays": 30,
+  "alertDays": 2
+}

@@ -32,6 +32,7 @@ export function parseMissionCSV(text) {
         sleep: num(row.sleep),
         mood: num(row.mood),
         exercise_min: num(row.exercise_min),
+        radiation: num(row.radiation_msv),
       },
     };
   });
@@ -43,7 +44,7 @@ export async function loadDemo() {
   return parseMissionCSV(await res.text());
 }
 
-const DEFAULT_SETTINGS = { name: "Demo astronaut", place: "iss", exerciseTarget: 120 };
+const DEFAULT_SETTINGS = { name: "Demo astronaut", place: "iss", exerciseTarget: 120, priorDose: 0 };
 
 export function readState() {
   try {

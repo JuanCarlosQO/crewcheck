@@ -11,6 +11,7 @@ Story:
   days 26-30  partial recovery after the crew adjusts the schedule
   day 14      a typing mistake: heart rate saved as 400
   day 18      temperature not measured
+  day 22      dosimeter shows a dose spike, as during a solar particle event
 
 Run: python3 tools/make_demo.py
 """
@@ -21,7 +22,7 @@ from pathlib import Path
 random.seed(2026)
 OUT = Path(__file__).resolve().parent.parent / "data" / "mission_demo.csv"
 COLUMNS = ["day", "heart_rate", "bp_sys", "bp_dia", "temperature", "glucose",
-           "spo2", "sleep", "mood", "exercise_min"]
+           "spo2", "sleep", "mood", "exercise_min", "radiation_msv"]
 
 
 def jitter(value, spread):
@@ -57,9 +58,12 @@ for day in range(1, 31):
         "sleep": round(sleep, 1),
         "mood": mood,
         "exercise_min": round(ex),
+        "radiation_msv": round(jitter(0.5, 0.06), 2),
     }
     if day == 14:
         row["heart_rate"] = 400
+    if day == 22:
+        row["radiation_msv"] = 2.40
     if day == 18:
         row["temperature"] = ""
     rows.append(row)

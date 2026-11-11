@@ -1,0 +1,16 @@
+{
+  "_about": "Archived solar energetic particle (SEP) events from NASA DONKI, used when the app cannot reach the live service. Only events measured by the GOES satellites (protons above 10 or 100 MeV) are kept, one per storm. Retrieved on 11 November 2026 from the DONKI SEP API.",
+  "source": { "label": "NASA DONKI (Space Weather Database Of Notifications, Knowledge, Information)", "url": "https://ccmc.gsfc.nasa.gov/tools/DONKI/" },
+  "events": [
+    { "id": "2024-10-26T18:05:00-SEP-001", "time": "2024-10-26T18:05Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/34222/-1" },
+    { "id": "2024-10-09T03:50:00-SEP-001", "time": "2024-10-09T03:50Z", "instrument": "GOES-P: SEISS >100 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/33868/-1" },
+    { "id": "2024-09-17T07:35:00-SEP-001", "time": "2024-09-17T07:35Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/33467/-1" },
+    { "id": "2024-09-09T08:50:00-SEP-001", "time": "2024-09-09T08:50Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/33257/-1" },
+    { "id": "2024-06-08T02:25:00-SEP-001", "time": "2024-06-08T02:25Z", "instrument": "GOES-P: SEISS >100 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/31338/-1" },
+    { "id": "2024-05-13T14:00:00-SEP-001", "time": "2024-05-13T14:00Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/30817/-1" },
+    { "id": "2024-05-11T02:10:00-SEP-001", "time": "2024-05-11T02:10Z", "instrument": "GOES-P: SEISS >100 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/30714/-1" },
+    { "id": "2024-03-23T08:15:00-SEP-001", "time": "2024-03-23T08:15Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/29711/-1" },
+    { "id": "2024-03-15T20:50:00-SEP-001", "time": "2024-03-15T20:50Z", "instrument": "GOES-P: SEISS >10 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/29608/-1" },
+    { "id": "2024-02-12T10:15:00-SEP-001", "time": "2024-02-12T10:15Z", "instrument": "GOES-P: SEISS >100 MeV", "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/29158/-1" }
+  ]
+}

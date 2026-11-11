@@ -71,3 +71,9 @@ test("demo mission tells the intended story", () => {
   assert.equal(at(23).blood_pressure.status, "yellow");
   assert.equal(systemStatus(data.indicators, "heart", at(1)), "green");
 });
+
+test("a radiation dose far above the personal average turns yellow", () => {
+  const hist = [0.5, 0.48, 0.52, 0.5].map((v) => ({ trust: "ok", num: v, value: v, range: "green" }));
+  assert.equal(evaluate(ind("radiation"), 0.55, hist).status, "green");
+  assert.equal(evaluate(ind("radiation"), 2.4, hist).status, "yellow");
+});

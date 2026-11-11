@@ -3,6 +3,7 @@ import { projectLoss, projectionSeries, bandFor, exerciseAdherence, DAYS_PER_MON
 import { loadJSON, loadDemo, readState, saveState, defaultSettings } from "./store.js";
 import { holoSVG, calloutsHTML } from "./body.js";
 import { trendChart, projectionChart } from "./charts.js";
+import { HAZARDS, hazardStatus, missionDose, careerBand, stormAlert } from "./hazards.js";
 import { countUp, bindTilt, bindSpotlight, sparkline, statusRing, playTimelapse, reduceMotion } from "./fx.js";
 
 const STATUS = {
@@ -26,8 +27,8 @@ const VIEWS = ["today", "checkin", "trends", "future", "data"];
 const FUTURE_MAX_DAY = 1000;
 
 const app = {
-  data: null, forecast: null, state: null, days: [], shown: {}, stopPlay: null,
-  ui: { view: "today", day: null, system: null, trend: "heart_rate", futureDay: null, cm: false, checkinDay: null },
+  data: null, forecast: null, radiation: null, sw: { mode: "loading", events: [], archive: [] }, state: null, days: [], shown: {}, stopPlay: null,
+  ui: { view: "today", day: null, system: null, hazard: null, storm: null, trend: "heart_rate", futureDay: null, cm: false, checkinDay: null },
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -126,6 +127,63 @@ function missionStrip(day) {
   }).join("")}</div>`;
 }
 
+const HAZARD_ICONS = {
+  radiation: `<circle cx="12" cy="12" r="2"/><path d="M12 10 L9 4.8 A8 8 0 0 1 15 4.8 Z M13.7 13 L19.7 13 A8 8 0 0 1 16.7 18.2 Z M10.3 13 L7.3 18.2 A8 8 0 0 1 4.3 13 Z"/>`,
+  isolation: `<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="10" r="2.4"/><path d="M8.5 17 q3.5 -5 7 0"/>`,
+  distance: `<circle cx="5" cy="17" r="3"/><circle cx="19.5" cy="6.5" r="1.8"/><path d="M8 15 L17.5 8" stroke-dasharray="2 2.4"/>`,
+  gravity: `<circle cx="12" cy="7" r="4"/><path d="M12 13v8M8.5 17.5 12 21l3.5-3.5"/>`,
+  closed: `<path d="M3.5 18 a8.5 8.5 0 0 1 17 0 Z"/><path d="M8 14.5 q2 -2 4 0 t4 0"/>`,
+};
+
+function radiationState(day) {
+  const rad = app.radiation;
+  const dose = missionDose(app.state.entries, day, Number(app.state.settings.priorDose) || 0);
+  const share = dose / rad.careerLimitMSv;
+  const live = app.sw.mode === "live" ? stormAlert(app.sw.events, Date.now(), rad.alertDays) : null;
+  const storm = app.ui.storm ?? live;
+  return { dose, share, status: careerBand(dose, rad), storm, replay: Boolean(app.ui.storm) };
+}
+
+function hazardsFor(day, results) {
+  const bones = app.forecast.systems.find((s) => s.id === "bones");
+  const boneBand = bandFor(bones, projectLoss(bones, day, false, app.forecast.validatedMonths).mid);
+  const place = PLACES[app.state.settings.place];
+  const r = radiationState(day);
+  return hazardStatus(app.data.indicators, results, { boneBand, careerStatus: r.status, storm: r.storm, placeName: place.name, delay: place.delay });
+}
+
+function hazardRow(day, results) {
+  return `<div class="hazards" role="group" aria-label="The five hazards of human spaceflight">${hazardsFor(day, results).map((h, i) => `
+    <button class="hazard s-${h.status} ${app.ui.hazard === h.id ? "active" : ""}" data-hazard="${h.id}" ${stagger(i + 1)}>
+      <svg class="hz-icon" viewBox="0 0 24 24" aria-hidden="true">${HAZARD_ICONS[h.icon]}</svg>
+      <span class="hz-text"><span class="hz-name">${esc(h.name)}</span><span class="hz-note">${esc(h.note)}</span></span>
+      <span class="hz-dot" aria-label="${h.status === "none" ? "Information" : STATUS[h.status].label}"></span>
+    </button>`).join("")}</div>`;
+}
+
+function radiationPanel(day) {
+  const rad = app.radiation;
+  const r = radiationState(day);
+  const pct = Math.min(100, r.share * 100);
+  const latest = app.sw.events.length ? [...app.sw.events].sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0] : null;
+  const fmtDate = (t) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const swLine = app.sw.mode === "loading" ? "Checking NASA DONKI…"
+    : app.sw.mode === "live" ? (latest ? `Live from NASA DONKI: last solar particle event on ${fmtDate(latest.time)}.` : "Live from NASA DONKI: no solar particle events in the last 30 days.")
+    : `Offline: showing archived NASA DONKI events. Most recent in the archive: ${fmtDate(app.sw.archive[0].time)}.`;
+  const replayEvent = app.sw.archive.find((e) => e.id.startsWith("2024-05-11")) ?? app.sw.archive[0];
+  return `<div class="panel rad-panel ${r.storm ? "storm" : ""}" ${stagger(4)}>
+    <div class="panel-head"><h2>Radiation</h2>${r.storm ? pill("red", "Shelter now") : pill(r.status, "Career dose")}</div>
+    <div class="dose">
+      <p class="dose-num"><span class="num" data-count="${r.dose.toFixed(1)}" data-dec="1">${r.dose.toFixed(1)}</span><span class="unit">mSv this career</span></p>
+      <div class="dose-bar s-${r.status}" style="--p:${pct.toFixed(2)}%"><span></span><i style="left:${rad.displayBands.yellowFrom * 100}%"></i><i style="left:${rad.displayBands.redFrom * 100}%"></i></div>
+      <p class="small muted">${(r.share * 100).toFixed(1)}% of NASA's career limit of ${rad.careerLimitMSv} mSv. <a href="${esc(rad.careerLimitSource.url)}" target="_blank" rel="noopener">Source</a></p>
+    </div>
+    ${r.storm ? `<div class="storm-box"><p><strong>${r.replay ? `Replay of a real event: ${fmtDate(r.storm.time)}.` : "Solar particle event detected."}</strong> ${esc(rad.shelter)}</p><p class="small"><a href="${esc(r.storm.link)}" target="_blank" rel="noopener">${esc(r.storm.instrument)}</a> · NASA DONKI</p></div>` : ""}
+    <p class="sw-line small"><span class="sw-dot ${app.sw.mode}"></span>${esc(swLine)}</p>
+    <div class="form-actions">${r.replay ? `<button class="btn tiny ghost" data-storm-stop>End the replay</button>` : replayEvent ? `<button class="btn tiny ghost" data-storm-replay="${esc(replayEvent.id)}">Replay a real solar storm</button>` : ""}</div>
+  </div>`;
+}
+
 function viewToday() {
   const day = app.ui.day;
   if (!app.days.length) {
@@ -133,10 +191,15 @@ function viewToday() {
   }
   const results = resultsFor(day);
   const entry = entryFor(day);
-  const { overall, headline, normal } = summary(results);
+  const sum = summary(results);
+  const stormNow = radiationState(day).storm;
+  const overall = stormNow ? "red" : sum.overall;
+  const headline = stormNow ? `Solar storm: go to the shelter. ${sum.headline}` : sum.headline;
+  const normal = sum.normal;
   const sel = app.ui.system;
   const sysInfo = sel ? app.data.systems.find((s) => s.id === sel) : null;
-  const actions = actionItems(results);
+  const storm = radiationState(day).storm;
+  const actions = (storm ? `<li class="s-red" ${stagger(0)}><span class="a-bar" aria-hidden="true"></span><div><div class="a-top"><strong>Space radiation</strong>${pill("red")}</div><p>${esc(app.radiation.shelter)}</p></div></li>` : "") + actionItems(results);
   const tiles = app.data.indicators
     .filter((ind) => !sel || ind.system === sel)
     .map((ind, i) => tile(ind, results[ind.id], day, i)).join("");
@@ -154,6 +217,7 @@ function viewToday() {
       </div>
     </div>
     ${missionStrip(day)}
+    ${hazardRow(day, results)}
     <div class="scan-grid">
       <div class="panel holo-panel" ${stagger(1)}>
         <div class="holo spot" data-mode="today">
@@ -173,6 +237,7 @@ function viewToday() {
           <h2>What to do now</h2>
           ${actions ? `<ul class="action-list">${actions}</ul>` : `<p class="muted">Nothing to do. Keep your routine: exercise, meals and sleep on schedule.</p>`}
         </div>
+        ${radiationPanel(day)}
       </div>
     </div>
     <div class="tiles">${tiles || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
@@ -187,6 +252,9 @@ function paintToday(results) {
     z.dataset.status = systemStatus(app.data.indicators, z.dataset.system, results);
   });
   screen.dataset.selected = app.ui.system ?? "";
+  const hz = HAZARDS.find((h) => h.id === app.ui.hazard);
+  screen.dataset.hazard = hz ? hz.id : "";
+  screen.querySelectorAll("[data-system]").forEach((z) => z.classList.toggle("lit", Boolean(hz && hz.systems.includes(z.dataset.system))));
   // remember what is on screen so the next day counts up from here
   app.data.indicators.forEach((i) => {
     const v = results[i.id]?.value;
@@ -203,6 +271,7 @@ const FIELDS = [
   { id: "glucose", step: "1" },
   { id: "spo2", step: "1" },
   { id: "sleep", step: "0.1" },
+  { id: "radiation", step: "0.01" },
 ];
 const MOODS = [["1", "Very bad"], ["2", "Bad"], ["3", "OK"], ["4", "Good"], ["5", "Very good"]];
 
@@ -234,13 +303,13 @@ function viewCheckin() {
     <p class="lead" ${stagger(1)}>Enter what you measured and leave a box empty if you could not measure it. Each value is checked while you type.</p>
     <form id="checkin-form" novalidate>
       <div class="modules">${FIELDS.map(field).join("")}
-        <div class="module" data-field="exercise_min" ${stagger(6)}>
+        <div class="module" data-field="exercise_min" ${stagger(7)}>
           <label for="f-exercise_min"><span>Exercise today</span><span class="unit">min</span></label>
           <input id="f-exercise_min" name="exercise_min" type="number" inputmode="numeric" step="5" value="${prev.exercise_min ?? ""}" placeholder="—">
           <p class="muted small">Feeds Future body. Mission target: ${app.state.settings.exerciseTarget} minutes.</p>
         </div>
       </div>
-      <fieldset class="module mood" data-field="mood" ${stagger(7)}>
+      <fieldset class="module mood" data-field="mood" ${stagger(8)}>
         <legend>How do you feel today?</legend>
         <div class="faces">${MOODS.map(([v, label]) => `<label class="face"><input type="radio" name="mood" value="${v}" ${String(prev.mood) === v ? "checked" : ""}><span class="face-btn">${moodFace(v)}<span>${label}</span></span></label>`).join("")}</div>
         <div class="live" aria-live="polite"></div>
@@ -263,6 +332,7 @@ function readForm(form) {
     sleep: n("sleep"),
     mood: n("mood"),
     exercise_min: n("exercise_min"),
+    radiation: n("radiation"),
   };
 }
 
@@ -298,12 +368,12 @@ function viewTrends() {
   } else {
     series = [{ name: ind.name, points: pts.map((p) => ({ x: p.x, y: p.value, status: p.status, label: formatValue(ind, p.value) })) }];
     const vals = pts.map((p) => p.value).filter((v) => typeof v === "number" && v >= ind.plausible[0] && v <= ind.plausible[1]);
-    const g = ind.green.flat();
+    const g = ind.chartBands === false ? [] : ind.green.flat();
     const lo = Math.min(...vals, ...g), hi = Math.max(...vals, ...g);
     const pad = (hi - lo) * 0.25 || 1;
-    yMin = Math.max(ind.plausible[0], +(lo - pad).toFixed(1));
-    yMax = Math.min(ind.plausible[1], +(hi + pad).toFixed(1));
-    bands = [...ind.yellow.map(([a, b]) => ({ from: a, to: b, cls: "b-yellow" })), ...ind.green.map(([a, b]) => ({ from: a, to: b, cls: "b-green" }))];
+    yMin = Math.max(ind.plausible[0], +(lo - pad).toFixed(2));
+    yMax = Math.min(ind.plausible[1], +(hi + pad).toFixed(2));
+    bands = ind.chartBands === false ? [] : [...ind.yellow.map(([a, b]) => ({ from: a, to: b, cls: "b-yellow" })), ...ind.green.map(([a, b]) => ({ from: a, to: b, cls: "b-green" }))];
   }
   const flagged = app.days.filter((d) => d.results[ind.id].status !== "green");
   return `<section class="view trends">
@@ -468,6 +538,8 @@ function viewData() {
           <li><a href="https://www.nasa.gov/reference/risk-of-spaceflight-induced-bone-changes/" target="_blank" rel="noopener">NASA: Risk of Spaceflight-Induced Bone Changes</a></li>
           <li><a href="https://www.nasa.gov/directorates/esdmd/hhp/risk-of-impaired-performance-due-to-reduced-muscle-size-strength-and-endurance/" target="_blank" rel="noopener">NASA: Risk of impaired performance due to reduced muscle size, strength and endurance</a></li>
           <li><a href="https://ohsonline.com/articles/2012/08/27/nasa-more-hopeful-on-astronaut-fitness.aspx" target="_blank" rel="noopener">OHS Online (2012): NASA study on exercise, diet and bone density</a></li>
+          <li><a href="https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf" target="_blank" rel="noopener">NASA: Radiation Protection technical brief (career limit and storm shelter)</a></li>
+          <li><a href="https://ccmc.gsfc.nasa.gov/tools/DONKI/" target="_blank" rel="noopener">NASA DONKI: solar particle events, live and archived</a></li>
         </ul>
       </div>
     </div>
@@ -482,6 +554,7 @@ function viewData() {
           <div class="module"><label for="s-name"><span>Astronaut name</span></label><input id="s-name" name="name" value="${esc(s.name)}"></div>
           <div class="module"><label for="s-place"><span>Where you are</span></label><select id="s-place" name="place">${Object.entries(PLACES).map(([k, v]) => `<option value="${k}" ${s.place === k ? "selected" : ""}>${v.name}</option>`).join("")}</select></div>
           <div class="module"><label for="s-ex"><span>Daily exercise target</span><span class="unit">min</span></label><input id="s-ex" name="exerciseTarget" type="number" step="5" value="${s.exerciseTarget}"></div>
+          <div class="module"><label for="s-dose"><span>Dose from earlier missions</span><span class="unit">mSv</span></label><input id="s-dose" name="priorDose" type="number" step="1" min="0" value="${s.priorDose ?? 0}"></div>
         </div>
         <div class="form-actions"><button class="btn" type="submit">Save settings</button><span class="saved muted" aria-live="polite"></span></div>
       </form>
@@ -575,6 +648,9 @@ function bindEvents() {
     const d = t.dataset;
     const inToday = t.closest('.holo[data-mode="today"]');
     if (d.dayStep) { app.ui.day = Math.min(lastDay(), Math.max(app.days[0].day, app.ui.day + Number(d.dayStep))); render({ animate: false }); }
+    else if (d.hazard) { app.ui.hazard = app.ui.hazard === d.hazard ? null : d.hazard; render({ animate: false }); }
+    else if (d.stormReplay) { app.ui.storm = app.sw.archive.find((x) => x.id === d.stormReplay) ?? null; render({ animate: false }); }
+    else if (d.stormStop !== undefined) { app.ui.storm = null; render({ animate: false }); }
     else if (inToday && d.system) { app.ui.system = app.ui.system === d.system ? null : d.system; render({ animate: false }); }
     else if (d.systemClear !== undefined) { app.ui.system = null; render({ animate: false }); }
     else if (d.trend) { app.ui.trend = d.trend; app.ui.view === "trends" ? render({ animate: false }) : go("trends"); }
@@ -614,7 +690,7 @@ function bindEvents() {
       go("today");
     } else if (e.target.id === "settings-form") {
       const fd = new FormData(e.target);
-      app.state.settings = { ...app.state.settings, name: String(fd.get("name") || "Astronaut"), place: String(fd.get("place")), exerciseTarget: Number(fd.get("exerciseTarget")) || 120 };
+      app.state.settings = { ...app.state.settings, name: String(fd.get("name") || "Astronaut"), place: String(fd.get("place")), exerciseTarget: Number(fd.get("exerciseTarget")) || 120, priorDose: Math.max(0, Number(fd.get("priorDose")) || 0) };
       persist();
       render({ animate: false });
       $(".saved").textContent = "Saved.";
@@ -631,6 +707,28 @@ function startPlay(btn) {
   app.stopPlay = () => { stop(); btn.classList.remove("playing"); app.stopPlay = null; };
 }
 
+// Live space weather from NASA DONKI. If the request fails (no connection,
+// blocked network, rate limit), the app keeps working with the archive.
+async function fetchSpaceWeather() {
+  const end = new Date();
+  const start = new Date(end - app.radiation.liveDays * 864e5);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 7000);
+    const res = await fetch(`https://api.nasa.gov/DONKI/SEP?startDate=${iso(start)}&endDate=${iso(end)}&api_key=DEMO_KEY`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(String(res.status));
+    const list = await res.json();
+    app.sw.events = list.map((x) => ({ id: x.sepID, time: x.eventTime, instrument: (x.instruments ?? []).map((i) => i.displayName).join(", "), link: x.link }));
+    app.sw.mode = "live";
+  } catch {
+    app.sw.events = app.sw.archive;
+    app.sw.mode = "archive";
+  }
+  if (app.ui.view === "today") render({ animate: false });
+}
+
 async function reloadDemo() {
   app.state.entries = await loadDemo();
   app.ui.day = null;
@@ -640,9 +738,11 @@ async function reloadDemo() {
 
 async function start() {
   try {
-    const [data, forecast] = await Promise.all([loadJSON("data/indicators.json"), loadJSON("data/forecast.json")]);
+    const [data, forecast, radiation, sw] = await Promise.all([loadJSON("data/indicators.json"), loadJSON("data/forecast.json"), loadJSON("data/radiation.json"), loadJSON("data/space_weather.json")]);
     app.data = data;
     app.forecast = forecast;
+    app.radiation = radiation;
+    app.sw.archive = sw.events;
     app.state = readState() ?? { settings: defaultSettings(), entries: await loadDemo() };
     const mission = app.forecast.missions.find((m) => m.id === PLACES[app.state.settings.place].mission);
     app.ui.futureDay = mission?.days ?? 180;
@@ -650,6 +750,7 @@ async function start() {
     saveState(app.state);
     bindEvents();
     route();
+    fetchSpaceWeather();
   } catch (err) {
     $("#view").innerHTML = `<section class="view"><div class="panel"><h2>The app could not start</h2><p>${esc(err.message)}. Open it from a web server (for example GitHub Pages or <code>npm start</code>), not by double-clicking the file.</p></div></section>`;
   }
