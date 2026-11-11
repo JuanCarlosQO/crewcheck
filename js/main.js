@@ -1,17 +1,20 @@
 import { evaluateMission, evaluate, systemStatus, formatValue, worst, SEVERITY } from "./rules.js";
 import { projectLoss, projectionSeries, bandFor, exerciseAdherence, DAYS_PER_MONTH } from "./forecast.js";
 import { loadJSON, loadDemo, readState, saveState, defaultSettings } from "./store.js";
-import { bodySVG } from "./body.js";
+import { holoSVG, calloutsHTML } from "./body.js";
 import { trendChart, projectionChart } from "./charts.js";
+import { countUp, bindTilt, bindSpotlight, sparkline, statusRing, playTimelapse, reduceMotion } from "./fx.js";
 
 const STATUS = {
-  green: { label: "Normal", icon: "✓" },
-  yellow: { label: "Watch", icon: "!" },
-  red: { label: "Act now", icon: "✕" },
-  verify: { label: "Measure again", icon: "?" },
-  missing: { label: "No reading", icon: "–" },
-  none: { label: "Not measured daily", icon: "–" },
+  green: { label: "Normal" },
+  yellow: { label: "Watch" },
+  red: { label: "Act now" },
+  verify: { label: "Measure again" },
+  missing: { label: "No reading" },
+  none: { label: "Not daily" },
+  hatch: { label: "No number yet" },
 };
+const FORECAST_LABEL = { green: "Small change", yellow: "Moderate change", red: "Large change" };
 
 const PLACES = {
   iss: { name: "Space station", delay: "a few seconds", mission: "iss" },
@@ -20,18 +23,21 @@ const PLACES = {
 };
 
 const VIEWS = ["today", "checkin", "trends", "future", "data"];
+const FUTURE_MAX_DAY = 1000;
 
-const app = { data: null, forecast: null, state: null, days: [], ui: { view: "today", day: null, system: null, trend: "heart_rate", futureDay: null, cm: false, checkinDay: null } };
+const app = {
+  data: null, forecast: null, state: null, days: [], shown: {}, stopPlay: null,
+  ui: { view: "today", day: null, system: null, trend: "heart_rate", futureDay: null, cm: false, checkinDay: null },
+};
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const FORECAST_LABEL = { green: "Small change", yellow: "Moderate change", red: "Large change" };
-const chip = (status, extra = "") => `<span class="chip s-${status}"><span class="chip-icon" aria-hidden="true">${STATUS[status].icon}</span>${STATUS[status].label}${extra}</span>`;
-const forecastChip = (band) => `<span class="chip s-${band}"><span class="chip-icon" aria-hidden="true">${STATUS[band].icon}</span>${FORECAST_LABEL[band]}</span>`;
+const pill = (status, label = STATUS[status].label) => `<span class="pill s-${status}"><i aria-hidden="true"></i>${esc(label)}</span>`;
 const indById = (id) => app.data.indicators.find((i) => i.id === id);
 const lastDay = () => app.days.at(-1)?.day ?? 0;
 const resultsFor = (day) => app.days.find((d) => d.day === day)?.results ?? {};
 const entryFor = (day) => app.state.entries.find((e) => e.day === day);
+const stagger = (i) => `style="--i:${i}"`;
 
 function recompute() {
   app.state.entries.sort((a, b) => a.day - b.day);
@@ -44,10 +50,10 @@ function persist() {
   recompute();
 }
 
-/* ---------- Today ---------- */
+/* ---------- Today: body scan ---------- */
 
 function summary(results) {
-  const counts = { red: 0, yellow: 0, verify: 0 };
+  const counts = { red: 0, yellow: 0, verify: 0, green: 0 };
   Object.values(results).forEach((r) => { if (counts[r.status] != null) counts[r.status] += 1; });
   const overall = worst(Object.values(results).map((r) => r.status));
   const parts = [];
@@ -55,18 +61,31 @@ function summary(results) {
   if (counts.yellow) parts.push(`${counts.yellow} to watch`);
   if (counts.verify) parts.push(`${counts.verify} to measure again`);
   const headline = parts.length ? `${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}.` : overall === "missing" ? "No readings for this day yet." : "All readings are normal.";
-  return { overall, headline };
+  return { overall, headline, normal: counts.green };
 }
 
-function indicatorCard(ind, r, day) {
-  const value = formatValue(ind, r.value);
-  const confirm = r.trust === "jump" ? `<button class="btn small" data-confirm="${ind.id}" data-day="${day}">I measured again, it is correct</button>` : "";
-  const fix = r.trust === "impossible" || r.status === "missing" ? `<button class="btn small ghost" data-edit-day="${day}">Enter the reading</button>` : "";
-  return `<article class="ind-card s-${r.status}" data-system="${ind.system}">
-    <header><h3>${esc(ind.name)}</h3>${chip(r.status)}</header>
-    <p class="value"><span class="num">${value}</span> <span class="unit">${esc(ind.unit)}</span></p>
-    <p class="reason">${esc(r.reasons[0])}</p>
-    <div class="card-actions">${confirm}${fix}<button class="link" data-trend="${ind.id}">See trend</button></div>
+function valueMarkup(ind, value) {
+  if (value == null || (ind.type === "bp" && (value.sys == null || value.dia == null))) return `<span class="num">—</span>`;
+  const prev = app.shown[ind.id];
+  if (ind.type === "bp") {
+    return `<span class="num" data-count="${value.sys}" data-from="${prev?.sys ?? 0}">${value.sys}</span><span class="slash">/</span><span class="num" data-count="${value.dia}" data-from="${prev?.dia ?? 0}">${value.dia}</span>`;
+  }
+  return `<span class="num" data-count="${value}" data-dec="${ind.decimals ?? 0}" data-from="${typeof prev === "number" ? prev : 0}">${value.toFixed(ind.decimals ?? 0)}</span>`;
+}
+
+function tile(ind, r, day, i) {
+  const upto = app.days.filter((d) => d.day <= day).slice(-7);
+  const vals = upto.map((d) => { const v = d.results[ind.id]; return v.trust === "ok" ? v.num : null; });
+  const sts = upto.map((d) => d.results[ind.id].status);
+  const confirm = r.trust === "jump" ? `<button class="btn tiny" data-confirm="${ind.id}" data-day="${day}">Re-measured, it is correct</button>` : "";
+  const fix = r.trust === "impossible" || r.status === "missing" ? `<button class="btn tiny ghost" data-edit-day="${day}">Enter reading</button>` : "";
+  return `<article class="tile tilt s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
+    <div class="sheen" aria-hidden="true"></div>
+    <div class="tile-top"><h3>${esc(ind.name)}</h3>${pill(r.status)}</div>
+    <p class="tile-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span></p>
+    ${sparkline(vals, sts)}
+    <p class="tile-reason">${esc(r.reasons[0])}</p>
+    <div class="tile-actions">${confirm}${fix}<button class="link" data-trend="${ind.id}">Trend →</button></div>
   </article>`;
 }
 
@@ -76,69 +95,106 @@ function actionItems(results) {
     .map((ind) => ({ ind, r: results[ind.id] }))
     .filter(({ r }) => r && ["red", "yellow", "verify"].includes(r.status))
     .sort((a, b) => SEVERITY[b.r.status] - SEVERITY[a.r.status])
-    .map(({ ind, r }) => {
+    .map(({ ind, r }, i) => {
       let text;
       if (r.status === "verify") text = r.trust === "impossible" ? "This value cannot be right. Check the sensor and measure again before doing anything else." : "Measure again. If the new value is the same, confirm it so the app can judge it.";
       else text = ind.actions[r.status];
       const escalate = r.status === "red"
-        ? `<p class="escalate">Distance from Earth: from ${esc(place.name.toLowerCase())}, a message to the flight surgeon takes ${esc(place.delay)}. Start the steps above now; do not wait for the reply.</p>`
+        ? `<p class="escalate"><strong>Distance from Earth.</strong> From ${esc(place.name.toLowerCase())}, a message to the flight surgeon takes ${esc(place.delay)}. Start these steps now; do not wait for the reply.</p>`
         : "";
-      return `<li class="s-${r.status}">${chip(r.status)}<div><strong>${esc(ind.name)}</strong><p>${esc(text)}</p>${escalate}</div></li>`;
+      return `<li class="s-${r.status}" ${stagger(i)}><span class="a-bar" aria-hidden="true"></span><div><div class="a-top"><strong>${esc(ind.name)}</strong>${pill(r.status)}</div><p>${esc(text)}</p>${escalate}</div></li>`;
     }).join("");
+}
+
+function calloutInfoToday(results) {
+  const info = {};
+  for (const s of app.data.systems) {
+    const status = systemStatus(app.data.indicators, s.id, results);
+    const inds = app.data.indicators.filter((i) => i.system === s.id);
+    const detail = inds.map((i) => `${formatValue(i, results[i.id]?.value)} ${i.unit}`).join(" · ");
+    info[s.id] = status === "none"
+      ? { status: "none", label: "Not measured daily", detail: "Open Future body" }
+      : { status, label: STATUS[status].label, detail: esc(detail) };
+  }
+  return info;
+}
+
+function missionStrip(day) {
+  return `<div class="strip" role="group" aria-label="Mission days">${app.days.map((d) => {
+    const st = worst(Object.values(d.results).map((r) => r.status));
+    return `<button class="strip-day s-${st} ${d.day === day ? "current" : ""}" data-goto-day="${d.day}" aria-label="Day ${d.day}: ${STATUS[st].label}" title="Day ${d.day}"></button>`;
+  }).join("")}</div>`;
 }
 
 function viewToday() {
   const day = app.ui.day;
   if (!app.days.length) {
-    return `<section class="empty card"><h2>No readings yet</h2><p>Start with today's check-in, or load the demo mission from Data &amp; sources.</p><a class="btn" href="#checkin">Start check-in</a></section>`;
+    return `<section class="view"><div class="panel empty"><h2>No readings yet</h2><p>Start with today's log, or load the demo mission from Sources.</p><a class="btn" href="#checkin">Start the log</a></div></section>`;
   }
   const results = resultsFor(day);
   const entry = entryFor(day);
-  const { overall, headline } = summary(results);
+  const { overall, headline, normal } = summary(results);
   const sel = app.ui.system;
   const sysInfo = sel ? app.data.systems.find((s) => s.id === sel) : null;
-  const sysStatus = (id) => systemStatus(app.data.indicators, id, results);
   const actions = actionItems(results);
-  const cards = app.data.indicators
+  const tiles = app.data.indicators
     .filter((ind) => !sel || ind.system === sel)
-    .map((ind) => indicatorCard(ind, results[ind.id], day)).join("");
+    .map((ind, i) => tile(ind, results[ind.id], day, i)).join("");
+  const ring = statusRing(app.data.indicators.map((i) => results[i.id].status));
 
-  return `<section class="today">
-    <div class="dayline">
-      <button class="icon-btn" data-day-step="-1" aria-label="Previous day" ${day <= app.days[0].day ? "disabled" : ""}>‹</button>
-      <h1>Mission day ${day}</h1>
-      <button class="icon-btn" data-day-step="1" aria-label="Next day" ${day >= lastDay() ? "disabled" : ""}>›</button>
-      <span class="tag">${entry?.source === "demo" ? "Demo data" : "Logged by you"}</span>
-    </div>
-    <div class="summary s-${overall}">${chip(overall)}<p>${esc(headline)}</p></div>
-    <div class="today-grid">
-      <div class="card body-card">
-        <div class="card-head"><h2>Body map</h2>${sel ? `<button class="link" data-system-clear>Show all</button>` : `<span class="hint">Tap a part of the body</span>`}</div>
-        <div class="body-wrap" data-mode="today">${bodySVG("today")}</div>
-        <ul class="legend">${app.data.systems.map((s) => `<li><button class="legend-item ${sel === s.id ? "active" : ""}" data-system-pick="${s.id}"><span class="dot s-${sysStatus(s.id)}"></span>${esc(s.name)}</button></li>`).join("")}</ul>
-        ${sysInfo ? `<div class="system-info"><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p>${sel === "bones" ? `<a class="btn small" href="#future">Open Future body</a>` : ""}</div>` : ""}
+  return `<section class="view today">
+    <div class="view-head" ${stagger(0)}>
+      <div>
+        <p class="kicker">Body scan · ${entry?.source === "demo" ? "demo data" : "your log"}</p>
+        <h1>Mission day <span class="accent">${day}</span></h1>
       </div>
-      <div class="right-col">
-        <div class="card actions">
+      <div class="stepper">
+        <button class="round" data-day-step="-1" aria-label="Previous day" ${day <= app.days[0].day ? "disabled" : ""}>‹</button>
+        <button class="round" data-day-step="1" aria-label="Next day" ${day >= lastDay() ? "disabled" : ""}>›</button>
+      </div>
+    </div>
+    ${missionStrip(day)}
+    <div class="scan-grid">
+      <div class="panel holo-panel" ${stagger(1)}>
+        <div class="holo spot" data-mode="today">
+          ${holoSVG("today")}
+          <div class="callouts">${calloutsHTML("today", calloutInfoToday(results))}</div>
+        </div>
+        <div class="holo-foot">${sysInfo
+          ? `<div><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p></div><div class="holo-foot-actions">${sel === "bones" ? `<a class="btn tiny" href="#future">Open Future body</a>` : ""}<button class="btn tiny ghost" data-system-clear>Show all</button></div>`
+          : `<p class="muted">Tap a part of the body or a label to focus on it.</p>`}</div>
+      </div>
+      <div class="side">
+        <div class="panel status-panel s-${overall}" ${stagger(2)}>
+          <div class="ring-wrap">${ring}<div class="ring-center"><span class="num" data-count="${normal}">${normal}</span><small>of ${app.data.indicators.length} normal</small></div></div>
+          <div class="status-text"><p class="kicker">Status</p><p class="headline">${esc(headline)}</p>${pill(overall)}</div>
+        </div>
+        <div class="panel actions-panel" ${stagger(3)}>
           <h2>What to do now</h2>
           ${actions ? `<ul class="action-list">${actions}</ul>` : `<p class="muted">Nothing to do. Keep your routine: exercise, meals and sleep on schedule.</p>`}
         </div>
-        <div class="ind-grid">${cards || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
       </div>
     </div>
+    <div class="tiles">${tiles || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
   </section>`;
 }
 
-function paintBody(results) {
-  document.querySelectorAll('.body-wrap[data-mode="today"] .zone').forEach((z) => {
-    const id = z.dataset.system;
-    z.dataset.status = systemStatus(app.data.indicators, id, results);
-    z.classList.toggle("selected", app.ui.system === id);
-    z.classList.toggle("dimmed", Boolean(app.ui.system) && app.ui.system !== id);
+function paintToday(results) {
+  const screen = $('.holo[data-mode="today"]');
+  if (!screen) return;
+  screen.querySelectorAll("[data-system]").forEach((z) => {
+    if (z.classList.contains("callout")) return;
+    z.dataset.status = systemStatus(app.data.indicators, z.dataset.system, results);
+  });
+  screen.dataset.selected = app.ui.system ?? "";
+  // remember what is on screen so the next day counts up from here
+  app.data.indicators.forEach((i) => {
+    const v = results[i.id]?.value;
+    app.shown[i.id] = v && i.type === "bp" ? { ...v } : v;
   });
 }
 
-/* ---------- Check-in ---------- */
+/* ---------- Log (check-in) ---------- */
 
 const FIELDS = [
   { id: "heart_rate", step: "1" },
@@ -148,41 +204,48 @@ const FIELDS = [
   { id: "spo2", step: "1" },
   { id: "sleep", step: "0.1" },
 ];
-const MOODS = [["1", "😣", "Very bad"], ["2", "🙁", "Bad"], ["3", "😐", "OK"], ["4", "🙂", "Good"], ["5", "😄", "Very good"]];
+const MOODS = [["1", "Very bad"], ["2", "Bad"], ["3", "OK"], ["4", "Good"], ["5", "Very good"]];
+
+function moodFace(v) {
+  const mouth = { 1: "M9 17 q3 -4 6 0", 2: "M9 16.5 q3 -2 6 0", 3: "M9 16 h6", 4: "M9 15.5 q3 2 6 0", 5: "M8.5 15 q3.5 4 7 0" }[v];
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><circle class="eye" cx="9" cy="10" r="1.1"/><circle class="eye" cx="15" cy="10" r="1.1"/><path d="${mouth}"/></svg>`;
+}
 
 function viewCheckin() {
   const editing = app.ui.checkinDay;
   const day = editing ?? lastDay() + 1;
   const prev = entryFor(day)?.values ?? {};
-  const field = (f) => {
+  const field = (f, i) => {
     const ind = indById(f.id);
     const input = f.bp
       ? `<div class="bp-inputs"><input id="f-bp-sys" name="bp_sys" type="number" inputmode="numeric" placeholder="120" value="${prev.blood_pressure?.sys ?? ""}" aria-label="Systolic, top number"><span>/</span><input id="f-bp-dia" name="bp_dia" type="number" inputmode="numeric" placeholder="80" value="${prev.blood_pressure?.dia ?? ""}" aria-label="Diastolic, bottom number"></div>`
-      : `<input id="f-${f.id}" name="${f.id}" type="number" inputmode="decimal" step="${f.step}" value="${prev[f.id] ?? ""}">`;
-    return `<div class="field" data-field="${f.id}">
-      <label for="${f.bp ? "f-bp-sys" : "f-" + f.id}">${esc(ind.name)} <span class="unit">${esc(ind.unit)}</span></label>
+      : `<input id="f-${f.id}" name="${f.id}" type="number" inputmode="decimal" step="${f.step}" value="${prev[f.id] ?? ""}" placeholder="—">`;
+    return `<div class="module" data-field="${f.id}" ${stagger(i)}>
+      <label for="${f.bp ? "f-bp-sys" : "f-" + f.id}"><span>${esc(ind.name)}</span><span class="unit">${esc(ind.unit)}</span></label>
       ${input}
       <div class="live" aria-live="polite"></div>
       <details><summary>How to measure</summary><ol>${ind.howToMeasure.map((s) => `<li>${esc(s)}</li>`).join("")}</ol><p class="muted">${esc(ind.whatIs)}</p></details>
     </div>`;
   };
-  return `<section class="checkin">
-    <h1>${editing ? `Edit day ${day}` : `Check-in for mission day ${day}`}</h1>
-    <p class="muted">Fill in what you measured. Leave a box empty if you could not measure it. Each value is checked as you type.</p>
-    <form id="checkin-form" class="card" novalidate>
-      <div class="fields">${FIELDS.map(field).join("")}
-        <div class="field" data-field="exercise_min">
-          <label for="f-exercise_min">Exercise today <span class="unit">min</span></label>
-          <input id="f-exercise_min" name="exercise_min" type="number" inputmode="numeric" step="5" value="${prev.exercise_min ?? ""}">
-          <p class="muted small">Used in Future body. Your mission target is ${app.state.settings.exerciseTarget} minutes.</p>
+  return `<section class="view checkin">
+    <div class="view-head" ${stagger(0)}>
+      <div><p class="kicker">Daily log</p><h1>${editing ? `Edit day <span class="accent">${day}</span>` : `Log mission day <span class="accent">${day}</span>`}</h1></div>
+    </div>
+    <p class="lead" ${stagger(1)}>Enter what you measured and leave a box empty if you could not measure it. Each value is checked while you type.</p>
+    <form id="checkin-form" novalidate>
+      <div class="modules">${FIELDS.map(field).join("")}
+        <div class="module" data-field="exercise_min" ${stagger(6)}>
+          <label for="f-exercise_min"><span>Exercise today</span><span class="unit">min</span></label>
+          <input id="f-exercise_min" name="exercise_min" type="number" inputmode="numeric" step="5" value="${prev.exercise_min ?? ""}" placeholder="—">
+          <p class="muted small">Feeds Future body. Mission target: ${app.state.settings.exerciseTarget} minutes.</p>
         </div>
       </div>
-      <fieldset class="mood" data-field="mood">
+      <fieldset class="module mood" data-field="mood" ${stagger(7)}>
         <legend>How do you feel today?</legend>
-        <div class="faces">${MOODS.map(([v, face, label]) => `<label class="face"><input type="radio" name="mood" value="${v}" ${String(prev.mood) === v ? "checked" : ""}><span class="face-btn"><span aria-hidden="true">${face}</span>${label}</span></label>`).join("")}</div>
+        <div class="faces">${MOODS.map(([v, label]) => `<label class="face"><input type="radio" name="mood" value="${v}" ${String(prev.mood) === v ? "checked" : ""}><span class="face-btn">${moodFace(v)}<span>${label}</span></span></label>`).join("")}</div>
         <div class="live" aria-live="polite"></div>
       </fieldset>
-      <div class="form-actions"><button class="btn" type="submit">Save check-in</button>${editing ? `<button class="btn ghost" type="button" data-cancel-edit>Cancel</button>` : ""}</div>
+      <div class="form-actions"><button class="btn big" type="submit">Save log</button>${editing ? `<button class="btn ghost" type="button" data-cancel-edit>Cancel</button>` : ""}</div>
     </form>
   </section>`;
 }
@@ -206,17 +269,17 @@ function readForm(form) {
 function liveCheck(form) {
   const day = app.ui.checkinDay ?? lastDay() + 1;
   const values = readForm(form);
-  const before = app.state.entries.filter((e) => e.day < day);
-  const hist = evaluateMission(app.data.indicators, before);
+  const hist = evaluateMission(app.data.indicators, app.state.entries.filter((e) => e.day < day));
   for (const ind of app.data.indicators) {
-    const box = form.querySelector(`[data-field="${ind.id}"] .live`);
+    const mod = form.querySelector(`[data-field="${ind.id}"]`);
+    const box = mod?.querySelector(".live");
     if (!box) continue;
     const v = values[ind.id];
     const bpPartial = ind.type === "bp" && v && (v.sys == null || v.dia == null);
-    if (v == null || bpPartial) { box.innerHTML = ""; continue; }
-    const history = hist.map((d) => d.results[ind.id]);
-    const r = evaluate(ind, v, history);
-    box.innerHTML = `${chip(r.status)}<span>${esc(r.reasons[0])}</span>`;
+    if (v == null || bpPartial) { box.innerHTML = ""; mod.dataset.status = ""; continue; }
+    const r = evaluate(ind, v, hist.map((d) => d.results[ind.id]));
+    mod.dataset.status = r.status;
+    box.innerHTML = `${pill(r.status)}<span>${esc(r.reasons[0])}</span>`;
   }
 }
 
@@ -224,18 +287,14 @@ function liveCheck(form) {
 
 function viewTrends() {
   const ind = indById(app.ui.trend);
-  const pts = app.days.map((d) => {
-    const r = d.results[ind.id];
-    return { x: d.day, status: r.status, value: r.value };
-  });
+  const pts = app.days.map((d) => ({ x: d.day, status: d.results[ind.id].status, value: d.results[ind.id].value }));
   let series, yMin, yMax, bands;
   if (ind.type === "bp") {
     series = [
       { name: "Top number", points: pts.map((p) => ({ x: p.x, y: p.value?.sys ?? null, status: p.status, label: formatValue(ind, p.value) })) },
       { name: "Bottom number", points: pts.map((p) => ({ x: p.x, y: p.value?.dia ?? null, status: p.status, label: formatValue(ind, p.value) })) },
     ];
-    yMin = 50; yMax = 160;
-    bands = [];
+    yMin = 50; yMax = 160; bands = [];
   } else {
     series = [{ name: ind.name, points: pts.map((p) => ({ x: p.x, y: p.value, status: p.status, label: formatValue(ind, p.value) })) }];
     const vals = pts.map((p) => p.value).filter((v) => typeof v === "number" && v >= ind.plausible[0] && v <= ind.plausible[1]);
@@ -247,197 +306,230 @@ function viewTrends() {
     bands = [...ind.yellow.map(([a, b]) => ({ from: a, to: b, cls: "b-yellow" })), ...ind.green.map(([a, b]) => ({ from: a, to: b, cls: "b-green" }))];
   }
   const flagged = app.days.filter((d) => d.results[ind.id].status !== "green");
-  return `<section class="trends">
-    <h1>Trends</h1>
-    <div class="tabs" role="tablist">${app.data.indicators.map((i) => `<button role="tab" aria-selected="${i.id === ind.id}" class="tab ${i.id === ind.id ? "active" : ""}" data-trend="${i.id}">${esc(i.name)}</button>`).join("")}</div>
-    <div class="card">
-      <div class="card-head"><h2>${esc(ind.name)} <span class="unit">${esc(ind.unit)}</span></h2>
-        <ul class="key">${ind.type === "bp" ? `<li><span class="k line0"></span>Top number</li><li><span class="k line1"></span>Bottom number</li><li class="muted">Normal: below 120/80</li>` : `<li><span class="k b-green"></span>Normal range</li><li><span class="k b-yellow"></span>Watch range</li>`}<li><span class="k verify"></span>Measure again</li></ul>
-      </div>
-      <div class="chart-wrap">${trendChart({ series, bands, xMax: Math.max(lastDay(), 2), yMin, yMax, unit: ind.unit, selectedX: app.ui.day })}</div>
-      <p class="axis-caption">Horizontal axis: mission day.</p>
-      <p class="muted small">${esc(ind.whatIs)} Related hazard: ${esc(ind.hazard)}.</p>
+  return `<section class="view trends">
+    <div class="view-head" ${stagger(0)}><div><p class="kicker">Trends</p><h1>${esc(ind.name)} <span class="unit-h">${esc(ind.unit)}</span></h1></div></div>
+    <div class="segments" role="tablist" ${stagger(1)}>${app.data.indicators.map((i) => `<button role="tab" aria-selected="${i.id === ind.id}" class="segment ${i.id === ind.id ? "active" : ""}" data-trend="${i.id}">${esc(i.name)}</button>`).join("")}</div>
+    <div class="panel screen-panel" ${stagger(2)}>
+      <ul class="key">${ind.type === "bp" ? `<li><span class="k line0"></span>Top number</li><li><span class="k line1"></span>Bottom number</li><li>Normal: below 120/80</li>` : `<li><span class="k b-green"></span>Normal range</li><li><span class="k b-yellow"></span>Watch range</li>`}<li><span class="k verify"></span>Measure again</li></ul>
+      <div class="screen spot chart-wrap">${trendChart({ series, bands, xMax: Math.max(lastDay(), 2), yMin, yMax, unit: ind.unit, selectedX: app.ui.day })}</div>
+      <p class="axis-caption">Horizontal axis: mission day. ${esc(ind.whatIs)} Related hazard: ${esc(ind.hazard)}.</p>
     </div>
-    <div class="card">
+    <div class="panel" ${stagger(3)}>
       <h2>Days that need a look</h2>
-      ${flagged.length ? `<ul class="flag-list">${flagged.map((d) => { const r = d.results[ind.id]; return `<li><button class="link" data-goto-day="${d.day}">Day ${d.day}</button><span class="num">${formatValue(ind, r.value)}</span>${chip(r.status)}<span class="muted">${esc(r.reasons[0])}</span></li>`; }).join("")}</ul>` : `<p class="muted">Every day is in the normal range.</p>`}
+      ${flagged.length ? `<ul class="flag-list">${flagged.map((d) => { const r = d.results[ind.id]; return `<li><button class="link" data-goto-day="${d.day}">Day ${d.day}</button><span class="num">${formatValue(ind, r.value)}</span>${pill(r.status)}<span class="muted">${esc(r.reasons[0])}</span></li>`; }).join("")}</ul>` : `<p class="muted">Every day is in the normal range.</p>`}
     </div>
   </section>`;
 }
 
 /* ---------- Future body ---------- */
 
-const FUTURE_MAX_DAY = 1000;
-
 function futureParts() {
   const f = app.forecast;
   const bones = f.systems.find((s) => s.id === "bones");
   const validatedDay = Math.round(f.validatedMonths * DAYS_PER_MONTH);
-  const maxDay = FUTURE_MAX_DAY;
   const day = app.ui.futureDay;
   const cm = app.ui.cm;
   const p = projectLoss(bones, day, cm, f.validatedMonths);
   const band = bandFor(bones, p.mid);
   const adherence = exerciseAdherence(app.state.entries, app.state.settings.exerciseTarget);
-  const yMax = Math.max(10, Math.ceil(projectLoss(bones, maxDay, false, f.validatedMonths).high / 10) * 10);
+  const yMax = Math.max(10, Math.ceil(projectLoss(bones, FUTURE_MAX_DAY, false, f.validatedMonths).high / 10) * 10);
   const fmt = (v) => v.toFixed(1);
 
-  const text = cm && p.uncertainCountermeasure
-    ? `Between <strong>0%</strong> and <strong>−${fmt(p.high)}%</strong>. Exercise helps, but NASA has not published by how much, so the app shows the whole possible range.`
-    : `Between <strong>−${fmt(p.low)}%</strong> and <strong>−${fmt(p.high)}%</strong> of bone density in the spine and hips.`;
+  const scenarios = [{ cls: "no-cm", label: "No resistive exercise", points: projectionSeries(bones, FUTURE_MAX_DAY, false, f.validatedMonths) }];
+  if (cm) scenarios.push({ cls: "cm", label: bones.countermeasure.name, points: projectionSeries(bones, FUTURE_MAX_DAY, true, f.validatedMonths) });
 
-  const scenarios = [
-    { cls: "no-cm", label: "No resistive exercise", points: projectionSeries(bones, maxDay, false, f.validatedMonths) },
-  ];
-  if (cm) scenarios.push({ cls: "cm", label: bones.countermeasure.name, points: projectionSeries(bones, maxDay, true, f.validatedMonths) });
-
+  const range = `<span class="range"><span class="range-num">${cm && p.uncertainCountermeasure ? "0.0" : "−" + fmt(p.low)}</span><span class="range-to">to</span><span class="range-num">−${fmt(p.high)}</span><span class="range-unit">%</span></span>`;
   const readout = `
-    <div class="card-head"><h2>Bones · day ${day}</h2>${forecastChip(band)}</div>
-    <p class="big">${text}</p>
-    ${p.extrapolated ? `<p class="warn">Past ${f.validatedMonths} months the rate is extrapolated: NASA measured it on missions of four to six months, so treat this as a rough estimate.</p>` : ""}
-    ${cm && p.uncertainCountermeasure ? `<p class="muted small">${esc(bones.countermeasure.note)} <a href="${esc(bones.countermeasure.source.url)}" target="_blank" rel="noopener">Source</a>.</p>` : ""}
-    ${adherence ? `<p class="fact">Your log: you reached the ${app.state.settings.exerciseTarget}-minute exercise target on <strong>${adherence.met} of ${adherence.total}</strong> days.</p>` : ""}`;
+    <div class="readout-top"><p class="kicker">Bones · spine &amp; hips · day ${day}</p>${pill(band, FORECAST_LABEL[band])}</div>
+    ${range}
+    <p class="readout-sub">${cm && p.uncertainCountermeasure ? "Exercise helps, but NASA has not published by how much, so the range starts at no loss." : "Bone density compared with before flight."}</p>
+    ${p.extrapolated ? `<p class="note warn">Past ${f.validatedMonths} months this is an extrapolation: NASA measured the rate on missions of four to six months.</p>` : ""}
+    ${cm && p.uncertainCountermeasure ? `<p class="note">${esc(bones.countermeasure.note)} <a href="${esc(bones.countermeasure.source.url)}" target="_blank" rel="noopener">Source</a>.</p>` : ""}
+    ${adherence ? `<p class="note">Your log: exercise target of ${app.state.settings.exerciseTarget} min reached on <strong>${adherence.met} of ${adherence.total}</strong> days.</p>` : ""}`;
+
+  const info = {
+    bones: { status: band, label: FORECAST_LABEL[band], detail: `−${fmt(p.low)} to −${fmt(p.high)}%` },
+  };
+  for (const s of f.systems.filter((x) => x.kind === "qualitative")) info[s.id] = { status: "hatch", label: "No number yet", detail: "" };
 
   return {
-    bones, day, cm, band,
-    label: `Day in space: <strong class="num">${day}</strong> <span class="muted">(${(day / DAYS_PER_MONTH).toFixed(1)} months)</span>`,
-    legend: `<li><span class="dot s-${band}"></span>Bones: ${FORECAST_LABEL[band].toLowerCase()}</li><li><span class="dot hatch"></span>No published number yet</li>`,
-    readout,
-    chart: projectionChart({ scenarios, maxDay, yMax, selectedDay: day, validatedDay, todayDay: lastDay() || null }),
+    bones, day, cm, band, p, readout, info,
+    months: (day / DAYS_PER_MONTH).toFixed(1),
+    chart: projectionChart({ scenarios, maxDay: FUTURE_MAX_DAY, yMax, selectedDay: day, validatedDay, todayDay: lastDay() || null }),
     key: `<li><span class="k no-cm"></span>No resistive exercise</li>${cm ? `<li><span class="k cm"></span>With countermeasures</li>` : ""}<li><span class="k extrap"></span>Beyond measured missions</li>`,
   };
 }
 
 function updateFuture() {
   const p = futureParts();
-  $("#future-label").innerHTML = p.label;
-  $("#future-legend").innerHTML = p.legend;
+  $("#future-day-num").textContent = p.day;
+  $("#future-months").textContent = p.months;
+  $("#future-day").value = p.day;
+  $("#future-day").style.setProperty("--fill", `${(p.day / FUTURE_MAX_DAY) * 100}%`);
   const ro = $("#future-readout");
-  ro.className = `card readout s-${p.band}`;
+  ro.className = `panel readout s-${p.band}`;
   ro.innerHTML = p.readout;
   $("#future-chart").innerHTML = p.chart;
   $("#future-key").innerHTML = p.key;
-  $("#future-intro-day").textContent = p.day;
+  $('.holo[data-mode="future"] .callouts').innerHTML = calloutsHTML("future", p.info);
   document.querySelectorAll(".preset").forEach((b) => b.classList.toggle("active", Number(b.dataset.preset) === p.day));
-  paintFuture();
+  paintFuture(p);
 }
 
 function viewFuture() {
   const f = app.forecast;
-  const { bones, day, cm, band, label, legend, readout, chart, key } = futureParts();
-
-  const qual = f.systems.filter((s) => s.kind === "qualitative").map((s) => `
-    <article class="qual">
-      <header><h3>${esc(s.name)}</h3><span class="badge pending">No number yet</span></header>
+  const p = futureParts();
+  const qual = f.systems.filter((s) => s.kind === "qualitative").map((s, i) => `
+    <article class="panel qual tilt" ${stagger(i + 5)}>
+      <div class="sheen" aria-hidden="true"></div>
+      <div class="tile-top"><h3>${esc(s.name)}</h3>${pill("hatch")}</div>
       <p>${esc(s.summary)}</p>
       <p class="muted small">${s.source ? `Source: <a href="${esc(s.source.url)}" target="_blank" rel="noopener">${esc(s.source.label)}</a>. ` : "Source pending. "}Research team: ${esc(s.pending)}.</p>
     </article>`).join("");
 
-  return `<section class="future">
-    <div class="future-intro">
-      <h1>Future body</h1>
-      <p>If the mission goes on like this, how will your body be on day <span id="future-intro-day">${day}</span>? Move the slider and turn countermeasures on and off.</p>
+  return `<section class="view future">
+    <div class="view-head" ${stagger(0)}>
+      <div><p class="kicker">Future body</p><h1>Your body on day <span class="accent" id="future-day-num">${p.day}</span></h1>
+      <p class="lead">If the mission goes on like this, how will your body change? Choose a mission, move through time and switch countermeasures on.</p></div>
     </div>
-    <div class="future-grid">
-      <div class="card body-card">
-        <div class="body-wrap" data-mode="future">${bodySVG("future")}</div>
-        <ul class="legend compact" id="future-legend">${legend}</ul>
-      </div>
-      <div class="right-col">
-        <div class="card controls">
-          <div class="presets" role="group" aria-label="Mission length">
-            ${f.missions.map((m) => `<button class="preset ${day === m.days ? "active" : ""}" data-preset="${m.days}">${esc(m.name)}<span>${m.days} days</span></button>`).join("")}
-          </div>
-          <label class="slider-label" for="future-day" id="future-label">${label}</label>
-          <input id="future-day" type="range" min="0" max="${FUTURE_MAX_DAY}" step="5" value="${day}">
-          <label class="toggle"><input id="cm-toggle" type="checkbox" ${cm ? "checked" : ""}><span class="switch" aria-hidden="true"></span>${esc(bones.countermeasure.name)}</label>
+    <div class="scan-grid">
+      <div class="panel holo-panel" ${stagger(1)}>
+        <div class="holo spot" data-mode="future">
+          ${holoSVG("future")}
+          <div class="callouts">${calloutsHTML("future", p.info)}</div>
         </div>
-        <div class="card readout s-${band}" id="future-readout">${readout}</div>
+        <div class="holo-foot"><p class="muted">Bones fade and become porous as density is lost. Hatched systems have no published number yet.</p></div>
+      </div>
+      <div class="side">
+        <div class="panel controls" ${stagger(2)}>
+          <div class="presets" role="group" aria-label="Mission length">
+            ${f.missions.map((m) => `<button class="preset ${p.day === m.days ? "active" : ""}" data-preset="${m.days}"><span class="preset-name">${esc(m.name)}</span><span class="preset-days">${m.days} days</span></button>`).join("")}
+          </div>
+          <div class="time-row">
+            <button class="play" data-play aria-label="Play the mission from launch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>
+            <div class="time-slider">
+              <label for="future-day">Day in space · <span id="future-months">${p.months}</span> months</label>
+              <input id="future-day" type="range" min="0" max="${FUTURE_MAX_DAY}" step="5" value="${p.day}" style="--fill:${(p.day / FUTURE_MAX_DAY) * 100}%">
+            </div>
+          </div>
+          <label class="toggle"><input id="cm-toggle" type="checkbox" ${p.cm ? "checked" : ""}><span class="switch" aria-hidden="true"></span><span>${esc(p.bones.countermeasure.name)}</span></label>
+        </div>
+        <div class="panel readout s-${p.band}" id="future-readout" ${stagger(3)}>${p.readout}</div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-head"><h2>Bone density loss over the mission</h2>
-        <ul class="key" id="future-key">${key}</ul>
-      </div>
-      <div class="chart-wrap" id="future-chart">${chart}</div>
-      <p class="axis-caption">Horizontal axis: days in space. Vertical axis: bone density compared with before flight.</p>
-      <blockquote class="source">“${esc(bones.lossSource.quote)}” <a href="${esc(bones.lossSource.url)}" target="_blank" rel="noopener">${esc(bones.lossSource.label)}</a></blockquote>
-      <p class="muted small">${esc(bones.displayBands.note)} Projection for education, based on published averages. It is not a diagnosis.</p>
+    <div class="panel screen-panel" ${stagger(4)}>
+      <div class="panel-head"><h2>Bone density loss over the mission</h2><ul class="key" id="future-key">${p.key}</ul></div>
+      <div class="screen spot chart-wrap" id="future-chart">${p.chart}</div>
+      <p class="axis-caption">Horizontal axis: days in space. Vertical axis: bone density compared with before flight. ${esc(p.bones.displayBands.note)}</p>
+      <blockquote class="source">“${esc(p.bones.lossSource.quote)}” <a href="${esc(p.bones.lossSource.url)}" target="_blank" rel="noopener">${esc(p.bones.lossSource.label)}</a></blockquote>
     </div>
     <h2 class="section-title">Other systems</h2>
     <div class="qual-grid">${qual}</div>
+    <p class="disclaimer">Projection for education, based on published averages. It is not a diagnosis.</p>
   </section>`;
 }
 
-function paintFuture() {
-  const f = app.forecast;
-  const bones = f.systems.find((s) => s.id === "bones");
-  const p = projectLoss(bones, app.ui.futureDay, app.ui.cm, f.validatedMonths);
-  document.querySelectorAll('.body-wrap[data-mode="future"] .zone').forEach((z) => {
-    z.dataset.status = z.dataset.system === "bones" ? bandFor(bones, p.mid) : "hatch";
+function paintFuture(p = futureParts()) {
+  const screen = $('.holo[data-mode="future"]');
+  if (!screen) return;
+  const loss = Math.min(1, p.p.mid / 30);
+  screen.style.setProperty("--loss", loss.toFixed(3));
+  screen.querySelectorAll("[data-system]").forEach((z) => {
+    if (z.classList.contains("callout")) return;
+    z.dataset.status = z.dataset.system === "bones" ? p.band : "hatch";
   });
+  // Porous bones: the more density lost, the more gaps in the bone strokes.
+  const solid = (8 - loss * 6.5).toFixed(2);
+  const gap = (0.01 + loss * 5).toFixed(2);
+  screen.querySelectorAll(".skeleton .bone").forEach((b) => { b.style.strokeDasharray = `${solid} ${gap}`; });
 }
 
-/* ---------- Data & sources ---------- */
+/* ---------- Sources ---------- */
 
 function viewData() {
   const s = app.state.settings;
-  const rows = app.data.indicators.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.unit)}</td><td>${esc(i.hazard)}</td><td>${i.verified ? `<span class="badge ok">Source checked</span>` : `<span class="badge pending">Pending check</span>`}</td></tr>`).join("");
-  return `<section class="data-view">
-    <h1>Data &amp; sources</h1>
-    <div class="card">
-      <h2>What each label means</h2>
-      <ul class="badges">
-        <li><span class="badge ok">Source checked</span> The number comes from a cited source that the team has read.</li>
-        <li><span class="badge pending">Pending check</span> A general reference value still to be confirmed by the research team.</li>
-        <li><span class="badge pending">No number yet</span> No published figure found, so the app shows words instead of a number.</li>
-        <li><span class="tag">Demo data</span> Invented readings that tell a story for the demo. Never mixed with real data.</li>
-      </ul>
+  const rows = app.data.indicators.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.unit)}</td><td>${esc(i.hazard)}</td><td>${i.verified ? pill("green", "Source checked") : pill("verify", "Pending check")}</td></tr>`).join("");
+  return `<section class="view data-view">
+    <div class="view-head" ${stagger(0)}><div><p class="kicker">Sources</p><h1>Data you can <span class="accent">trace</span></h1></div></div>
+    <div class="data-grid">
+      <div class="panel" ${stagger(1)}>
+        <h2>What each label means</h2>
+        <ul class="badges">
+          <li>${pill("green", "Source checked")}<span>The number comes from a cited source that the team has read.</span></li>
+          <li>${pill("verify", "Pending check")}<span>A general reference value still to be confirmed by the research team.</span></li>
+          <li>${pill("hatch")}<span>No published figure found, so the app shows words instead of a number.</span></li>
+          <li>${pill("none", "Demo data")}<span>Invented readings that tell a story for the demo. Never mixed with real data.</span></li>
+        </ul>
+      </div>
+      <div class="panel" ${stagger(2)}>
+        <h2>Sources</h2>
+        <ul class="sources">
+          <li><a href="https://www.nasa.gov/hrp/hazards" target="_blank" rel="noopener">NASA Human Research Program: the five hazards of human spaceflight</a></li>
+          <li><a href="https://www.nasa.gov/reference/risk-of-spaceflight-induced-bone-changes/" target="_blank" rel="noopener">NASA: Risk of Spaceflight-Induced Bone Changes</a></li>
+          <li><a href="https://www.nasa.gov/directorates/esdmd/hhp/risk-of-impaired-performance-due-to-reduced-muscle-size-strength-and-endurance/" target="_blank" rel="noopener">NASA: Risk of impaired performance due to reduced muscle size, strength and endurance</a></li>
+          <li><a href="https://ohsonline.com/articles/2012/08/27/nasa-more-hopeful-on-astronaut-fitness.aspx" target="_blank" rel="noopener">OHS Online (2012): NASA study on exercise, diet and bone density</a></li>
+        </ul>
+      </div>
     </div>
-    <div class="card">
+    <div class="panel" ${stagger(3)}>
       <h2>Daily indicators</h2>
       <div class="table-wrap"><table><thead><tr><th>Indicator</th><th>Unit</th><th>Spaceflight hazard</th><th>Ranges</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>
-    <div class="card">
-      <h2>Sources</h2>
-      <ul class="sources">
-        <li><a href="https://www.nasa.gov/hrp/hazards" target="_blank" rel="noopener">NASA Human Research Program: the five hazards of human spaceflight</a></li>
-        <li><a href="https://www.nasa.gov/reference/risk-of-spaceflight-induced-bone-changes/" target="_blank" rel="noopener">NASA: Risk of Spaceflight-Induced Bone Changes</a></li>
-        <li><a href="https://www.nasa.gov/directorates/esdmd/hhp/risk-of-impaired-performance-due-to-reduced-muscle-size-strength-and-endurance/" target="_blank" rel="noopener">NASA: Risk of impaired performance due to reduced muscle size, strength and endurance</a></li>
-        <li><a href="https://ohsonline.com/articles/2012/08/27/nasa-more-hopeful-on-astronaut-fitness.aspx" target="_blank" rel="noopener">OHS Online (2012): NASA study on exercise, diet and bone density</a></li>
-      </ul>
-    </div>
-    <form id="settings-form" class="card settings">
-      <h2>Settings</h2>
-      <div class="fields">
-        <div class="field"><label for="s-name">Astronaut name</label><input id="s-name" name="name" value="${esc(s.name)}"></div>
-        <div class="field"><label for="s-place">Where you are</label><select id="s-place" name="place">${Object.entries(PLACES).map(([k, v]) => `<option value="${k}" ${s.place === k ? "selected" : ""}>${v.name}</option>`).join("")}</select></div>
-        <div class="field"><label for="s-ex">Daily exercise target <span class="unit">min</span></label><input id="s-ex" name="exerciseTarget" type="number" step="5" value="${s.exerciseTarget}"></div>
+    <div class="data-grid">
+      <form id="settings-form" class="panel" ${stagger(4)}>
+        <h2>Settings</h2>
+        <div class="modules compact">
+          <div class="module"><label for="s-name"><span>Astronaut name</span></label><input id="s-name" name="name" value="${esc(s.name)}"></div>
+          <div class="module"><label for="s-place"><span>Where you are</span></label><select id="s-place" name="place">${Object.entries(PLACES).map(([k, v]) => `<option value="${k}" ${s.place === k ? "selected" : ""}>${v.name}</option>`).join("")}</select></div>
+          <div class="module"><label for="s-ex"><span>Daily exercise target</span><span class="unit">min</span></label><input id="s-ex" name="exerciseTarget" type="number" step="5" value="${s.exerciseTarget}"></div>
+        </div>
+        <div class="form-actions"><button class="btn" type="submit">Save settings</button><span class="saved muted" aria-live="polite"></span></div>
+      </form>
+      <div class="panel" ${stagger(5)}>
+        <h2>Your log</h2>
+        <p class="muted">Everything is stored only in this browser, so the app works without a connection to Earth.</p>
+        <div class="form-actions"><button class="btn ghost" data-reload-demo>Load the demo mission</button><button class="btn ghost danger" data-clear>Start an empty log</button></div>
+        <p class="confirm-line" hidden><span>This deletes every reading in this browser.</span><button class="btn tiny danger" data-clear-yes>Delete</button><button class="btn tiny ghost" data-clear-no>Keep</button></p>
       </div>
-      <div class="form-actions"><button class="btn" type="submit">Save settings</button><span class="saved muted" aria-live="polite"></span></div>
-    </form>
-    <div class="card">
-      <h2>Your log</h2>
-      <p class="muted">Everything is stored only in this browser, so the app works without a connection to Earth.</p>
-      <div class="form-actions"><button class="btn ghost" data-reload-demo>Load the demo mission</button><button class="btn ghost danger" data-clear>Start an empty log</button></div>
-      <p class="confirm-line" hidden><span>This deletes every reading in this browser.</span><button class="btn small danger" data-clear-yes>Delete</button><button class="btn small ghost" data-clear-no>Keep</button></p>
     </div>
     <p class="disclaimer">CrewCheck is a prototype for the NASA Space Apps Challenge 2026. It is not a medical device and does not replace a doctor or flight surgeon.</p>
   </section>`;
 }
 
-/* ---------- Router and events ---------- */
+/* ---------- Shell: HUD, dock, router ---------- */
 
-function render() {
-  const view = app.ui.view;
-  document.querySelectorAll(".nav a").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === `#${view}` ? "page" : "false"));
+function updateHud() {
   const place = PLACES[app.state.settings.place];
   $("#mission-chip").textContent = `${app.state.settings.name} · ${place.name} · day ${lastDay()}`;
+  const latest = [...app.days].reverse().map((d) => d.results.heart_rate).find((r) => r?.trust === "ok");
+  const hr = latest?.num ?? 70;
+  $("#hud-hr").textContent = latest ? Math.round(hr) : "--";
+  $("#hud-pulse").style.setProperty("--beat", `${((2 * 60) / hr).toFixed(2)}s`);
+}
+
+function moveDockGlow() {
+  const active = document.querySelector('.dock-item[aria-current="page"]');
+  const glow = $(".dock-glow");
+  if (!active || !glow) return;
+  glow.style.setProperty("--x", `${active.offsetLeft}px`);
+  glow.style.setProperty("--y", `${active.offsetTop}px`);
+  glow.style.setProperty("--w", `${active.offsetWidth}px`);
+  glow.style.setProperty("--h", `${active.offsetHeight}px`);
+}
+
+function render({ animate = true } = {}) {
+  const view = app.ui.view;
+  document.querySelectorAll(".dock-item").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === `#${view}` ? "page" : "false"));
+  moveDockGlow();
+  updateHud();
   const root = $("#view");
   root.innerHTML = { today: viewToday, checkin: viewCheckin, trends: viewTrends, future: viewFuture, data: viewData }[view]();
-  if (view === "today" && app.days.length) paintBody(resultsFor(app.ui.day));
+  root.classList.toggle("enter", animate && !reduceMotion());
+  if (animate) { root.style.animation = "none"; void root.offsetWidth; root.style.animation = ""; }
+  if (view === "today" && app.days.length) paintToday(resultsFor(app.ui.day));
   if (view === "future") paintFuture();
   if (view === "checkin") liveCheck($("#checkin-form"));
+  countUp(root);
 }
 
 function go(view) {
@@ -446,47 +538,61 @@ function go(view) {
 }
 
 function route() {
+  app.stopPlay?.();
   const h = location.hash.slice(1);
   app.ui.view = VIEWS.includes(h) ? h : "today";
   if (app.ui.view !== "checkin") app.ui.checkinDay = null;
   render();
-  window.scrollTo({ top: 0 });
+  window.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" });
+}
+
+function hover(system, on) {
+  const screen = document.querySelector(".holo");
+  if (screen) screen.dataset.hot = on ? system : "";
 }
 
 function bindEvents() {
   window.addEventListener("hashchange", route);
+  window.addEventListener("resize", moveDockGlow);
   const root = $("#view");
+  bindTilt(root);
+  bindSpotlight(root);
+
+  root.addEventListener("pointerover", (e) => {
+    const t = e.target.closest(".holo [data-system]");
+    if (t) hover(t.dataset.system, true);
+  });
+  root.addEventListener("pointerout", (e) => {
+    const t = e.target.closest(".holo [data-system]");
+    if (t && !t.contains(e.relatedTarget)) hover(t.dataset.system, false);
+  });
+  root.addEventListener("focusin", (e) => { const t = e.target.closest(".callout"); if (t) hover(t.dataset.system, true); });
+  root.addEventListener("focusout", (e) => { const t = e.target.closest(".callout"); if (t) hover(t.dataset.system, false); });
 
   root.addEventListener("click", (e) => {
-    const t = e.target.closest("button, [data-system]");
+    const t = e.target.closest("button, .holo .zone");
     if (!t) return;
     const d = t.dataset;
-    if (d.dayStep) { app.ui.day = Math.min(lastDay(), Math.max(app.days[0].day, app.ui.day + Number(d.dayStep))); render(); }
-    else if (d.systemPick) { app.ui.system = app.ui.system === d.systemPick ? null : d.systemPick; render(); }
-    else if (t.classList.contains("zone") && t.closest('[data-mode="today"]')) { app.ui.system = app.ui.system === d.system ? null : d.system; render(); }
-    else if (d.systemClear !== undefined) { app.ui.system = null; render(); }
-    else if (d.trend) { app.ui.trend = d.trend; go("trends"); }
-    else if (d.gotoDay) { app.ui.day = Number(d.gotoDay); go("today"); }
-    else if (d.confirm) { const en = entryFor(Number(d.day)); en.confirmed = { ...en.confirmed, [d.confirm]: true }; persist(); render(); }
+    const inToday = t.closest('.holo[data-mode="today"]');
+    if (d.dayStep) { app.ui.day = Math.min(lastDay(), Math.max(app.days[0].day, app.ui.day + Number(d.dayStep))); render({ animate: false }); }
+    else if (inToday && d.system) { app.ui.system = app.ui.system === d.system ? null : d.system; render({ animate: false }); }
+    else if (d.systemClear !== undefined) { app.ui.system = null; render({ animate: false }); }
+    else if (d.trend) { app.ui.trend = d.trend; app.ui.view === "trends" ? render({ animate: false }) : go("trends"); }
+    else if (d.gotoDay) { app.ui.day = Number(d.gotoDay); app.ui.view === "today" ? render({ animate: false }) : go("today"); }
+    else if (d.confirm) { const en = entryFor(Number(d.day)); en.confirmed = { ...en.confirmed, [d.confirm]: true }; persist(); render({ animate: false }); }
     else if (d.editDay) { app.ui.checkinDay = Number(d.editDay); location.hash === "#checkin" ? render() : (location.hash = "checkin"); }
     else if (d.cancelEdit !== undefined) { app.ui.checkinDay = null; go("today"); }
-    else if (d.preset) { app.ui.futureDay = Number(d.preset); $("#future-day").value = app.ui.futureDay; updateFuture(); }
+    else if (d.preset) { app.stopPlay?.(); app.ui.futureDay = Number(d.preset); updateFuture(); }
+    else if (d.play !== undefined) { startPlay(t); }
     else if (d.reloadDemo !== undefined) { reloadDemo(); }
     else if (d.clear !== undefined) { $(".confirm-line").hidden = false; }
     else if (d.clearNo !== undefined) { $(".confirm-line").hidden = true; }
     else if (d.clearYes !== undefined) { app.state.entries = []; persist(); app.ui.day = null; go("today"); }
   });
 
-  root.addEventListener("keydown", (e) => {
-    const z = e.target.closest(".zone");
-    if (z && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); z.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
-  });
-
   root.addEventListener("input", (e) => {
-    if (e.target.id === "future-day") {
-      app.ui.futureDay = Number(e.target.value);
-      updateFuture();
-    } else if (e.target.closest("#checkin-form")) liveCheck(e.target.closest("form"));
+    if (e.target.id === "future-day") { app.stopPlay?.(); app.ui.futureDay = Number(e.target.value); updateFuture(); }
+    else if (e.target.closest("#checkin-form")) liveCheck(e.target.closest("form"));
   });
 
   root.addEventListener("change", (e) => {
@@ -510,10 +616,19 @@ function bindEvents() {
       const fd = new FormData(e.target);
       app.state.settings = { ...app.state.settings, name: String(fd.get("name") || "Astronaut"), place: String(fd.get("place")), exerciseTarget: Number(fd.get("exerciseTarget")) || 120 };
       persist();
-      render();
+      render({ animate: false });
       $(".saved").textContent = "Saved.";
     }
   });
+}
+
+function startPlay(btn) {
+  app.stopPlay?.();
+  const target = app.ui.futureDay > 0 ? app.ui.futureDay : 180;
+  btn.classList.add("playing");
+  app.stopPlay = playTimelapse(0, target, 4200, (d) => { app.ui.futureDay = d; updateFuture(); }, () => { btn.classList.remove("playing"); app.stopPlay = null; });
+  const stop = app.stopPlay;
+  app.stopPlay = () => { stop(); btn.classList.remove("playing"); app.stopPlay = null; };
 }
 
 async function reloadDemo() {
@@ -536,7 +651,7 @@ async function start() {
     bindEvents();
     route();
   } catch (err) {
-    $("#view").innerHTML = `<section class="card error"><h2>The app could not start</h2><p>${esc(err.message)}. Open it from a web server (for example GitHub Pages or <code>npm start</code>), not by double-clicking the file.</p></section>`;
+    $("#view").innerHTML = `<section class="view"><div class="panel"><h2>The app could not start</h2><p>${esc(err.message)}. Open it from a web server (for example GitHub Pages or <code>npm start</code>), not by double-clicking the file.</p></div></section>`;
   }
 }
 

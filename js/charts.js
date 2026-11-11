@@ -47,9 +47,9 @@ export function trendChart({ series, bands = [], xMax, yMin, yMax, unit, selecte
     }
     const dots = s.points.filter((p) => p.y != null).map((p) => {
       const out = p.y > yMax || p.y < yMin;
-      return `<circle class="dot ${p.status}${out ? " out" : ""}" cx="${X(p.x)}" cy="${Y(clampY(p.y))}" r="${p.x === selectedX ? 6 : 4}"><title>Day ${p.x}: ${esc(p.label ?? p.y)} ${esc(unit)}</title></circle>`;
+      return `<circle class="dot ${p.status}${out ? " out" : ""}${p.x === selectedX ? " sel" : ""}" style="--d:${p.x}" cx="${X(p.x)}" cy="${Y(clampY(p.y))}" r="${p.x === selectedX ? 6 : 4}"><title>Day ${p.x}: ${esc(p.label ?? p.y)} ${esc(unit)}</title></circle>`;
     }).join("");
-    return `<path class="line s${si}" d="${path}" />${dots}`;
+    return `<path class="line s${si}" d="${path}" pathLength="1" />${dots}`;
   }).join("");
 
   const sel = selectedX ? `<line class="selected" x1="${X(selectedX)}" x2="${X(selectedX)}" y1="${T}" y2="${H - B}" />` : "";

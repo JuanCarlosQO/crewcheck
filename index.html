@@ -5,31 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CrewCheck</title>
   <meta name="claude:viewport-fit-sides" content="cover">
-  <meta name="description" content="Astronaut health self-assessment: daily check-in, body map, trends and a projection of how the body changes over a long mission.">
+  <meta name="description" content="Astronaut health self-assessment: daily check-in, holographic body scan, trends and a projection of how the body changes over a long mission.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap">
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f6e74'/%3E%3Cpath d='M6 17h5l2-6 4 12 3-8 2 2h4' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23061219'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' fill='none' stroke='%2334e6f5' stroke-width='2' transform='rotate(-28 16 16)'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%2334e6f5'/%3E%3C/svg%3E">
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="#today" aria-label="CrewCheck home">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" /><path d="M6 17h5l2-6 4 12 3-8 2 2h4" /></svg>
-        CrewCheck
-      </a>
-      <span class="mission-chip" id="mission-chip"></span>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <nav class="dock" aria-label="Sections">
+    <a class="dock-brand" href="#today" aria-label="CrewCheck home">
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <circle class="core" cx="20" cy="20" r="5" />
+        <ellipse class="orbit o1" cx="20" cy="20" rx="16" ry="6" />
+        <ellipse class="orbit o2" cx="20" cy="20" rx="16" ry="6" />
+      </svg>
+    </a>
+    <div class="dock-items">
+      <span class="dock-glow" aria-hidden="true"></span>
+      <a href="#today" class="dock-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.6"/><path d="M12 8.5v6M8 10.5l4 1.5 4-1.5M9.5 21l2.5-6.5 2.5 6.5"/></svg><span>Scan</span></a>
+      <a href="#checkin" class="dock-item"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="3"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg><span>Log</span></a>
+      <a href="#trends" class="dock-item"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-5 4 3 7-8"/><path d="M15 7h4v4"/></svg><span>Trends</span></a>
+      <a href="#future" class="dock-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/><path d="M19 4.5l1.5-1.5M4.5 19L3 20.5"/></svg><span>Future</span></a>
+      <a href="#data" class="dock-item"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg><span>Sources</span></a>
     </div>
-    <nav class="nav" aria-label="Sections">
-      <a href="#today">Today</a>
-      <a href="#checkin">Check-in</a>
-      <a href="#trends">Trends</a>
-      <a href="#future">Future body</a>
-      <a href="#data">Data &amp; sources</a>
-    </nav>
-  </header>
-  <main id="view" class="page"><p class="loading">Loading…</p></main>
+  </nav>
+
+  <div class="shell">
+    <header class="hud">
+      <div class="hud-id">
+        <span class="hud-brand">CrewCheck</span>
+        <span class="hud-mission" id="mission-chip"></span>
+      </div>
+      <div class="hud-pulse" id="hud-pulse" title="Latest resting heart rate">
+        <svg class="ecg" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="ecg-fade" x1="0" x2="1">
+              <stop offset="0" stop-color="currentColor" stop-opacity="0"/>
+              <stop offset="0.25" stop-color="currentColor" stop-opacity="1"/>
+              <stop offset="1" stop-color="currentColor" stop-opacity="1"/>
+            </linearGradient>
+          </defs>
+          <g class="ecg-track">
+            <path d="M0 22 H18 l4 -3 4 3 H34 l3 4 4 -22 5 30 4 -9 H62 q6 -7 12 0 H120 H138 l4 -3 4 3 H154 l3 4 4 -22 5 30 4 -9 H182 q6 -7 12 0 H240 H258 l4 -3 4 3 H274 l3 4 4 -22 5 30 4 -9 H302 q6 -7 12 0 H360 H378 l4 -3 4 3 H394 l3 4 4 -22 5 30 4 -9 H422 q6 -7 12 0 H480" />
+          </g>
+        </svg>
+        <span class="hud-hr"><strong id="hud-hr">--</strong> bpm</span>
+      </div>
+    </header>
+    <main id="view" class="page"><p class="loading">Starting scan…</p></main>
+  </div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
