@@ -4,6 +4,7 @@ import { loadJSON, loadDemo, readState, saveState, defaultSettings } from "./sto
 import { holoSVG, calloutsHTML } from "./body.js";
 import { trendChart, projectionChart } from "./charts.js";
 import { HAZARDS, hazardStatus, missionDose, careerBand, stormAlert } from "./hazards.js";
+import { openPulseSheet } from "./camera.js";
 import { countUp, bindTilt, bindSpotlight, sparkline, statusRing, playTimelapse, reduceMotion } from "./fx.js";
 
 const STATUS = {
@@ -79,11 +80,11 @@ function tile(ind, r, day, i) {
   const vals = upto.map((d) => { const v = d.results[ind.id]; return v.trust === "ok" ? v.num : null; });
   const sts = upto.map((d) => d.results[ind.id].status);
   const confirm = r.trust === "jump" ? `<button class="btn tiny" data-confirm="${ind.id}" data-day="${day}">Re-measured, it is correct</button>` : "";
-  const fix = r.trust === "impossible" || r.status === "missing" ? `<button class="btn tiny ghost" data-edit-day="${day}">Enter reading</button>` : "";
+  const fix = r.trust === "impossible" || r.trust === "low_signal" || r.status === "missing" ? `<button class="btn tiny ghost" data-edit-day="${day}">Enter reading</button>` : "";
   return `<article class="tile tilt s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
     <div class="sheen" aria-hidden="true"></div>
     <div class="tile-top"><h3>${esc(ind.name)}</h3>${pill(r.status)}</div>
-    <p class="tile-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span></p>
+    <p class="tile-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span>${r.measured?.method === "camera" ? `<span class="tag">Camera estimate</span>` : ""}</p>
     ${sparkline(vals, sts)}
     <p class="tile-reason">${esc(r.reasons[0])}</p>
     <div class="tile-actions">${confirm}${fix}<button class="link" data-trend="${ind.id}">Trend →</button></div>
@@ -98,7 +99,10 @@ function actionItems(results) {
     .sort((a, b) => SEVERITY[b.r.status] - SEVERITY[a.r.status])
     .map(({ ind, r }, i) => {
       let text;
-      if (r.status === "verify") text = r.trust === "impossible" ? "This value cannot be right. Check the sensor and measure again before doing anything else." : "Measure again. If the new value is the same, confirm it so the app can judge it.";
+      if (r.status === "verify") text = {
+        impossible: "This value cannot be right. Check the sensor and measure again before doing anything else.",
+        low_signal: "The camera signal was too weak to trust. Measure again with the camera or a medical sensor.",
+      }[r.trust] ?? "Measure again. If the new value is the same, confirm it so the app can judge it.";
       else text = ind.actions[r.status];
       const escalate = r.status === "red"
         ? `<p class="escalate"><strong>Distance from Earth.</strong> From ${esc(place.name.toLowerCase())}, a message to the flight surgeon takes ${esc(place.delay)}. Start these steps now; do not wait for the reply.</p>`
@@ -284,6 +288,11 @@ function viewCheckin() {
   const editing = app.ui.checkinDay;
   const day = editing ?? lastDay() + 1;
   const prev = entryFor(day)?.values ?? {};
+  const prevCam = entryFor(day)?.measured?.heart_rate;
+  const camera = (f) => f.id !== "heart_rate" ? "" : `
+      <input type="hidden" name="heart_rate_method" value="${prevCam?.method === "camera" ? "camera" : ""}">
+      <input type="hidden" name="heart_rate_quality" value="${prevCam?.method === "camera" ? esc(prevCam.quality) : ""}">
+      <button class="btn tiny ghost cam-btn" type="button" data-camera-hr><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="18" height="13" rx="3"/><path d="M8.5 6.5l1.5-2.5h4l1.5 2.5"/><path d="M6.5 13h2.5l1.2-2.2 1.8 4.4 1.3-2.2h4.2"/></svg>Measure with camera</button>`;
   const field = (f, i) => {
     const ind = indById(f.id);
     const input = f.bp
@@ -291,7 +300,7 @@ function viewCheckin() {
       : `<input id="f-${f.id}" name="${f.id}" type="number" inputmode="decimal" step="${f.step}" value="${prev[f.id] ?? ""}" placeholder="—">`;
     return `<div class="module" data-field="${f.id}" ${stagger(i)}>
       <label for="${f.bp ? "f-bp-sys" : "f-" + f.id}"><span>${esc(ind.name)}</span><span class="unit">${esc(ind.unit)}</span></label>
-      ${input}
+      ${input}${camera(f)}
       <div class="live" aria-live="polite"></div>
       <details><summary>How to measure</summary><ol>${ind.howToMeasure.map((s) => `<li>${esc(s)}</li>`).join("")}</ol><p class="muted">${esc(ind.whatIs)}</p></details>
     </div>`;
@@ -336,9 +345,35 @@ function readForm(form) {
   };
 }
 
+function readMeasured(form) {
+  const fd = new FormData(form);
+  if (fd.get("heart_rate_method") !== "camera") return {};
+  return { heart_rate: { method: "camera", quality: Number(fd.get("heart_rate_quality")) } };
+}
+
+function clearCamera(form) {
+  form.elements.heart_rate_method.value = "";
+  form.elements.heart_rate_quality.value = "";
+}
+
+function measureWithCamera(form) {
+  const ind = indById("heart_rate");
+  app.pulse = openPulseSheet({
+    minQuality: ind.camera?.minQuality ?? 60,
+    onUse: ({ bpm, quality }) => {
+      form.elements.heart_rate.value = String(bpm);
+      form.elements.heart_rate_method.value = "camera";
+      form.elements.heart_rate_quality.value = String(quality);
+      liveCheck(form);
+      form.elements.heart_rate.focus({ preventScroll: true });
+    },
+  });
+}
+
 function liveCheck(form) {
   const day = app.ui.checkinDay ?? lastDay() + 1;
   const values = readForm(form);
+  const measured = readMeasured(form);
   const hist = evaluateMission(app.data.indicators, app.state.entries.filter((e) => e.day < day));
   for (const ind of app.data.indicators) {
     const mod = form.querySelector(`[data-field="${ind.id}"]`);
@@ -347,9 +382,9 @@ function liveCheck(form) {
     const v = values[ind.id];
     const bpPartial = ind.type === "bp" && v && (v.sys == null || v.dia == null);
     if (v == null || bpPartial) { box.innerHTML = ""; mod.dataset.status = ""; continue; }
-    const r = evaluate(ind, v, hist.map((d) => d.results[ind.id]));
+    const r = evaluate(ind, v, hist.map((d) => d.results[ind.id]), false, measured[ind.id] ?? null);
     mod.dataset.status = r.status;
-    box.innerHTML = `${pill(r.status)}<span>${esc(r.reasons[0])}</span>`;
+    box.innerHTML = `${pill(r.status)}<span>${r.reasons.map(esc).join(" ")}</span>`;
   }
 }
 
@@ -612,6 +647,7 @@ function go(view) {
 
 function route() {
   app.stopPlay?.();
+  app.pulse?.close();
   const h = location.hash.slice(1);
   app.ui.view = VIEWS.includes(h) ? h : "today";
   if (app.ui.view !== "checkin") app.ui.checkinDay = null;
@@ -658,6 +694,7 @@ function bindEvents() {
     else if (d.confirm) { const en = entryFor(Number(d.day)); en.confirmed = { ...en.confirmed, [d.confirm]: true }; persist(); render({ animate: false }); }
     else if (d.editDay) { app.ui.checkinDay = Number(d.editDay); location.hash === "#checkin" ? render() : (location.hash = "checkin"); }
     else if (d.cancelEdit !== undefined) { app.ui.checkinDay = null; go("today"); }
+    else if (d.cameraHr !== undefined) { measureWithCamera(t.closest("form")); }
     else if (d.preset) { app.stopPlay?.(); app.ui.futureDay = Number(d.preset); updateFuture(); }
     else if (d.play !== undefined) { startPlay(t); }
     else if (d.reloadDemo !== undefined) { reloadDemo(); }
@@ -668,7 +705,11 @@ function bindEvents() {
 
   root.addEventListener("input", (e) => {
     if (e.target.id === "future-day") { app.stopPlay?.(); app.ui.futureDay = Number(e.target.value); updateFuture(); }
-    else if (e.target.closest("#checkin-form")) liveCheck(e.target.closest("form"));
+    else if (e.target.closest("#checkin-form")) {
+      const form = e.target.closest("form");
+      if (e.target.name === "heart_rate") clearCamera(form); // typed by hand: no longer a camera reading
+      liveCheck(form);
+    }
   });
 
   root.addEventListener("change", (e) => {
@@ -681,9 +722,10 @@ function bindEvents() {
     if (e.target.id === "checkin-form") {
       const day = app.ui.checkinDay ?? lastDay() + 1;
       const values = readForm(e.target);
+      const measured = values.heart_rate == null ? {} : readMeasured(e.target);
       const existing = entryFor(day);
-      if (existing) { existing.values = values; existing.source = "manual"; existing.confirmed = {}; }
-      else app.state.entries.push({ day, source: "manual", confirmed: {}, values });
+      if (existing) { existing.values = values; existing.source = "manual"; existing.confirmed = {}; existing.measured = measured; }
+      else app.state.entries.push({ day, source: "manual", confirmed: {}, measured, values });
       persist();
       app.ui.day = day;
       app.ui.checkinDay = null;

@@ -77,3 +77,27 @@ test("a radiation dose far above the personal average turns yellow", () => {
   assert.equal(evaluate(ind("radiation"), 0.55, hist).status, "green");
   assert.equal(evaluate(ind("radiation"), 2.4, hist).status, "yellow");
 });
+
+test("camera reading with a weak signal asks to measure again", () => {
+  const r = evaluate(ind("heart_rate"), 72, [], false, { method: "camera", quality: 40 });
+  assert.equal(r.status, "verify");
+  assert.equal(r.trust, "low_signal");
+});
+
+test("camera reading with a good signal is judged normally and labelled as an estimate", () => {
+  const r = evaluate(ind("heart_rate"), 72, [], false, { method: "camera", quality: 85 });
+  assert.equal(r.status, "green");
+  assert.match(r.reasons.at(-1), /Camera estimate/);
+  assert.equal(evaluate(ind("heart_rate"), 130, [], false, { method: "camera", quality: 85 }).status, "red");
+});
+
+test("confirming does not override a weak camera signal", () => {
+  const r = evaluate(ind("heart_rate"), 72, [], true, { method: "camera", quality: 20 });
+  assert.equal(r.status, "verify");
+});
+
+test("evaluateMission passes how each value was measured", () => {
+  const entries = [{ day: 1, values: { heart_rate: 72 }, measured: { heart_rate: { method: "camera", quality: 30 } } }];
+  const [d] = evaluateMission(data.indicators, entries);
+  assert.equal(d.results.heart_rate.trust, "low_signal");
+});

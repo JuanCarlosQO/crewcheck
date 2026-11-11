@@ -14,6 +14,17 @@ Status as of 11 November 2026. "Pending" items are tasks for the research team.
 | Sleep | 7–9 h normal | Pending source |
 | Mood | 4–5 normal on a 1–5 scale | App scale |
 
+### Camera heart rate (`js/ppg.js`, `js/camera.js`)
+
+| Item | Value | Status |
+| --- | --- | --- |
+| Method | Fingertip photoplethysmography: red brightness of the camera image, band-pass 0.7–3.5 Hz (42–210 bpm), beats counted over 20 seconds after 2 seconds of settling | Standard technique; shown in the app as an estimate, less accurate than a medical sensor |
+| Signal-quality score (0–100) | Finger coverage, beat regularity, rhythm strength and agreement of two rate estimates | App rule |
+| Acceptance | A camera reading below 60/100 becomes "Measure again" (`heart_rate.camera.minQuality`) | App rule, pending review against a real sensor |
+| Finger detection | Red at least 1.6 times green and blue | App rule |
+
+The camera reading then goes through the same heart-rate ranges as a typed value. It has not been compared against a medical sensor yet; the team should do that on real phones before the demo.
+
 These are general adult clinical references used as a starting point. When a range is confirmed, set `"verified": true` and fill in `"source"` with the URL.
 
 ## Future body (`data/forecast.json`)

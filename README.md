@@ -9,14 +9,14 @@ On long missions, astronauts must spot health changes in themselves. CrewCheck t
 | View | What the astronaut gets |
 | --- | --- |
 | **Today** | A body map coloured by system, every reading with a status (Normal, Watch, Act now, Measure again) and a plain-language action list. Red items say how long a message to the flight surgeon takes from the current location. |
-| **Check-in** | A daily form with step-by-step measuring instructions. Each value is checked as it is typed. |
+| **Check-in** | A daily form with step-by-step measuring instructions. Each value is checked as it is typed. Heart rate can also be measured with the phone camera (fingertip over the camera and torch), with a live pulse waveform and a signal-quality score. |
 | **Trends** | Each indicator over the mission, with its normal and watch ranges, and the days that need a look. |
 | **Future body** | A projection of bone density loss over the mission, built on NASA's published rate, with a countermeasure switch, mission presets and an honest uncertainty range. |
 | **Data & sources** | Every source, which values are verified, and the app settings. |
 
 ### What makes it different
 
-1. **It checks the measurement before the health.** An impossible value (a heart rate of 400) or a sudden jump asks the astronaut to measure again instead of raising a false alarm.
+1. **It checks the measurement before the health.** An impossible value (a heart rate of 400), a sudden jump or a weak camera signal asks the astronaut to measure again instead of raising a false alarm.
 2. **It compares you with yourself.** A value inside the normal range still turns yellow when it is far from your own 7-day average.
 3. **It looks forward.** *Future body* shows how the body changes with mission length and what countermeasures do, and it never shows a number that has no published source.
 
@@ -42,6 +42,8 @@ index.html            app shell
 css/styles.css        design tokens, light and dark themes
 js/main.js            views, navigation and events
 js/rules.js           health rules: missing, plausible, jump, ranges, personal baseline, streaks
+js/ppg.js             camera heart rate: filtering, beat detection, signal-quality score
+js/camera.js          camera heart-rate sheet: camera and torch, live waveform
 js/forecast.js        Future body projection
 js/body.js            body map (SVG)
 js/charts.js          trend and projection charts (SVG, no libraries)
@@ -50,7 +52,7 @@ data/indicators.json  ranges, texts and actions for each indicator
 data/forecast.json    projection rates and their sources
 data/mission_demo.csv 30-day demo mission (invented data)
 tools/make_demo.py    script that generates the demo mission
-tests/                unit tests for the rules and the projection
+tests/                unit tests for the rules, the projection, the hazards and the camera pulse
 docs/                 data sources and AI use
 ```
 
