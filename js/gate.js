@@ -1,15 +1,14 @@
-// Crew access screen. The app opens like the crew's own Flight Data File: a
-// binder cover with a sealing strap and a combination dial printed on it.
-//   - Dial: the ten digits sit around a ring like a safe's dial. Tap them (or
-//     type them); the needle swings to each digit you press.
-//   - Thumb pad: the centre of the dial is the fingerprint plate. It uses the
-//     device's own fingerprint reader through WebAuthn (or face unlock where
-//     that is what the device has).
-// When access is granted the strap slides off and the cover swings open on
-// its binder rings, revealing the app underneath.
+// Crew access screen, "Earthlight". The night side of Earth fills the bottom
+// of the screen, the station crosses the sky on its orbit, and the crew member
+// is greeted by name with a quiet keypad.
+//   - Code: four digits; each one lights a gold dot.
+//   - Fingerprint: the gold key in the corner of the keypad uses the device's
+//     own reader through WebAuthn (or face unlock where that is what it has).
+// When access is granted the sun rises over the horizon and the screen fades
+// into the app.
 
 import { PIN_LENGTH, pinProblem, createPinRecord, checkPin, lockoutMs, triesLeft, randomBytes, toB64url, fromB64url, verifyAssertion } from "./auth.js";
-import { patchSVG } from "./brand.js";
+import { markSVG } from "./brand.js";
 
 const STORE = "crewcheck.access";
 const SESSION = "crewcheck.unlocked";
@@ -94,94 +93,53 @@ async function checkFingerprint() {
 
 /* ---------- Drawing ---------- */
 
-function fingerprintSVG() {
-  // Ridges as broken loops around a core, like a whorl print. Each ridge has
-  // pathLength 1 so the scan can light them one after another.
-  const ridges = [];
-  const gaps = [[0.18, 0.05], [0.62, 0.06], [0.33, 0.07], [0.8, 0.05], [0.12, 0.08], [0.5, 0.06], [0.71, 0.07], [0.27, 0.06], [0.9, 0.05]];
-  for (let i = 0; i < 9; i++) {
-    const rx = 4 + i * 3.3, ry = 5.5 + i * 3.9;
-    const [g0, gl] = gaps[i];
-    const a0 = Math.PI * (0.92 + 1.16 * (g0 + gl)), a1 = Math.PI * (0.92 + 1.16 * (1 + g0));
-    const pt = (a) => `${(32 + rx * Math.cos(a)).toFixed(2)} ${(35 + ry * Math.sin(a)).toFixed(2)}`;
-    const large = a1 - a0 > Math.PI ? 1 : 0;
-    ridges.push(`<path pathLength="1" style="--k:${i}" d="M${pt(a0)} A${rx} ${ry} 0 ${large} 1 ${pt(a1)}"/>`);
-  }
-  ridges.push(`<path pathLength="1" style="--k:9" d="M30 36 q2 -5 4 0 q1 4 -2 6"/>`);
-  return `<svg class="fp" viewBox="0 0 64 70" aria-hidden="true">${ridges.join("")}</svg>`;
-}
+const FP = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 19c-1.5-2-2-4-2-7a7 7 0 0 1 14 0"/><path d="M10 20c-1-2-1.5-4-1.5-7a3.5 3.5 0 0 1 7 0c0 2 .3 4 1 6"/><path d="M13 21c-.8-2-1-4.5-1-8"/><path d="M4.5 8.5A8.5 8.5 0 0 1 12 3.5a8.5 8.5 0 0 1 7.5 5"/></svg>`;
 
-function dialSVG() {
-  // Graduations: 50 fine ticks, a long tick under each digit.
-  let ticks = "";
-  for (let i = 0; i < 50; i++) {
-    const long = i % 5 === 0;
-    const a = (i / 50) * 2 * Math.PI - Math.PI / 2;
-    const r1 = 100, r2 = long ? 92 : 96;
-    ticks += `<line class="${long ? "t-long" : "t"}" x1="${(120 + r1 * Math.cos(a)).toFixed(2)}" y1="${(120 + r1 * Math.sin(a)).toFixed(2)}" x2="${(120 + r2 * Math.cos(a)).toFixed(2)}" y2="${(120 + r2 * Math.sin(a)).toFixed(2)}"/>`;
-  }
-  return `<svg class="dial-face" viewBox="0 0 240 240" aria-hidden="true">
-    <circle class="d-rim" cx="120" cy="120" r="117"/>
-    <circle class="d-ring" cx="120" cy="120" r="103"/>
-    <g class="d-ticks">${ticks}</g>
-    <circle class="d-inner" cx="120" cy="120" r="84"/>
-    <g class="needle"><path d="M120 37.5 l-6.5 11 h13 z"/><line x1="120" y1="48" x2="120" y2="56"/></g>
-  </svg>`;
+function greeting(now = new Date()) {
+  const h = now.getHours();
+  return h < 5 ? "Good evening," : h < 12 ? "Good morning," : h < 18 ? "Good afternoon," : "Good evening,";
 }
 
 function keysHTML() {
-  return Array.from({ length: 10 }, (_, d) => {
-    const a = (d / 10) * 360;
-    return `<button type="button" class="dkey" data-digit="${d}" style="--a:${a}deg" aria-label="${d}"><span>${d}</span></button>`;
-  }).join("");
+  const key = (d) => `<button type="button" class="dkey" data-digit="${d}">${d}</button>`;
+  return `${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(key).join("")}
+    <button type="button" class="gkey thumb" data-thumb aria-label="Unlock with fingerprint"><span>${FP}</span></button>
+    ${key(0)}
+    <button type="button" class="gkey back" data-back>Delete</button>`;
 }
 
 function coverHTML({ crewName, place, day }) {
   return `
-  <div class="cover" role="dialog" aria-modal="true" aria-labelledby="gate-title" aria-describedby="gate-msg">
-    <div class="cover-back" aria-hidden="true"></div>
-    <div class="cover-rings" aria-hidden="true"><i></i><i></i><i></i></div>
-    <div class="strap" aria-hidden="true"><span>Sealed</span><span>Crew only</span></div>
-    <div class="cover-face">
-      <header class="cover-top">
-        <span>Flight Data File</span><span>Crew health · Vol. 1</span>
-      </header>
-      <div class="cover-id">
-        ${patchSVG({ ring: true, cls: "patch big" })}
-        <div class="cover-who">
-          <p class="cover-kicker">Issued to</p>
-          <h1 id="gate-title">${esc(crewName)}</h1>
-          <p class="cover-meta">${esc(place)} · mission day ${esc(day)}</p>
-        </div>
-      </div>
-
-      <div class="gate-stage">
-        <div class="dial" data-state="idle">
-          ${dialSVG()}
-          <div class="keys">${keysHTML()}</div>
-          <div class="dial-core">
-            <div class="slots" aria-hidden="true">${"<i></i>".repeat(PIN_LENGTH)}</div>
-            <button type="button" class="thumb" data-thumb aria-label="Unlock with fingerprint">
-              ${fingerprintSVG()}
-              <span class="thumb-label">Thumb</span>
-            </button>
-          </div>
-        </div>
-        <div class="gate-card" hidden></div>
-      </div>
-
-      <p class="gate-step" id="gate-step"></p>
-      <p class="gate-msg" id="gate-msg" aria-live="polite"></p>
-      <div class="gate-links">
-        <button type="button" class="link" data-back>Delete last digit</button>
-        <button type="button" class="link" data-forgot>Forgot your code?</button>
-      </div>
-
-      <footer class="cover-foot">
-        <span>Your code and fingerprint key stay on this device.</span>
-        <span class="barcode" aria-hidden="true"></span>
-      </footer>
+  <div class="g-sky" aria-hidden="true">
+    <div class="stars"></div>
+    <svg class="g-orbit" viewBox="0 0 390 210" preserveAspectRatio="none"><path d="M -20 170 Q 195 -10 410 150"/></svg>
+    <span class="g-iss"><i></i>ISS</span>
+    <div class="g-sun"></div>
+    <div class="g-earth"><div class="lights"></div></div>
+  </div>
+  <div class="g-panel" role="dialog" aria-modal="true" aria-labelledby="gate-title" aria-describedby="gate-msg">
+    <header class="g-top">
+      <span class="g-brand">${markSVG()}CrewCheck</span>
+      <span class="g-meta">${esc(place)} · Day ${esc(day)}</span>
+    </header>
+    <div class="g-hello">
+      <p class="g-greet">${greeting()}</p>
+      <h1 id="gate-title">${esc(crewName)}</h1>
     </div>
+    <p class="gate-step" id="gate-step"></p>
+    <div class="g-code">
+      <div class="slots" aria-hidden="true">${"<i></i>".repeat(PIN_LENGTH)}</div>
+      <span class="g-rule"></span>
+    </div>
+    <p class="gate-msg" id="gate-msg" aria-live="polite"></p>
+    <div class="gate-stage">
+      <div class="dial" data-state="idle">${keysHTML()}</div>
+      <div class="gate-card" hidden></div>
+    </div>
+    <div class="gate-links">
+      <button type="button" class="link" data-forgot>Forgot your code?</button>
+    </div>
+    <footer class="g-foot">Your code and fingerprint key stay on this device.</footer>
   </div>`;
 }
 
@@ -190,8 +148,8 @@ function coverHTML({ crewName, place, day }) {
 /**
  * @param host      element that receives the gate
  * @param app       element to make inert while locked
- * @param crew()    returns { crewName, place, day } for the cover
- * @param onOpen    called as the cover starts to open (the app can redraw underneath)
+ * @param crew()    returns { crewName, place, day } for the greeting
+ * @param onOpen    called as the screen starts to fade (the app can redraw underneath)
  * @param onReset   erase everything and start again
  */
 export function createGate({ host, app, crew, onOpen, onReset }) {
@@ -224,17 +182,6 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
     $("[data-back]").disabled = !digits.length;
   }
 
-  function swing(d) {
-    // The needle turns clockwise to the digit, always forwards, like a safe dial.
-    const n = dial().querySelector(".needle");
-    const now = Number(n.dataset.turn ?? 0);
-    const target = (d / 10) * 360;
-    let next = now - (now % 360) + target;
-    if (next <= now) next += 360;
-    n.dataset.turn = String(next);
-    n.style.transform = `rotate(${next}deg)`;
-  }
-
   function showCard(html) {
     const card = $(".gate-card");
     card.innerHTML = html;
@@ -261,10 +208,10 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
     thumb.classList.toggle("off", !bio);
     $("[data-forgot]").hidden = m !== "login";
     const steps = {
-      login: ["Crew access", bio && bioReady ? "Dial your 4-digit crew code, or hold your thumb on the centre." : "Dial your 4-digit crew code."],
-      setup: ["Step 1 of 2 · Choose a crew code", "Dial four digits you will remember. Not 1234, not 0000."],
-      confirm: ["Step 2 of 2 · Confirm", "Dial the same code again."],
-      change: ["Change code", "First dial your current code."],
+      login: ["Crew access", bio && bioReady ? "Enter your code, or touch the fingerprint key." : "Enter your 4-digit crew code."],
+      setup: ["Step 1 of 2 · Choose a crew code", "Four digits you will remember. Not 1234, not 0000."],
+      confirm: ["Step 2 of 2 · Confirm", "Enter the same code again."],
+      change: ["Change code", "First enter your current code."],
     }[m];
     step(steps[0]);
     say(message ?? steps[1], tone);
@@ -286,18 +233,17 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
     if (left > 0) {
       setState("locked");
       const s = Math.ceil(left / 1000);
-      say(`Too many wrong codes. Dial again in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.${fingerprintSaved() && bioReady ? " Your thumb still works." : ""}`, "bad");
+      say(`Too many wrong codes. Try again in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.${fingerprintSaved() && bioReady ? " Your fingerprint still works." : ""}`, "bad");
       timer = setTimeout(tickLockout, 1000 - (left % 1000) + 5);
     } else if (dial().dataset.state === "locked") {
       setState("idle");
-      say("You can dial again.");
+      say("You can enter your code again.");
     }
   }
 
   async function press(d) {
     if (busy || digits.length >= PIN_LENGTH || lockedFor() > 0) return;
     digits += d;
-    swing(Number(d));
     paintSlots();
     setState("idle");
     if (digits.length === PIN_LENGTH) await submit();
@@ -374,11 +320,11 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
         return grant("Fingerprint accepted.");
       }
       setState("error");
-      say(`${res.reason} Dial your code instead.`, "bad");
+      say(`${res.reason} Enter your code instead.`, "bad");
     } catch (err) {
       busy = false;
       setState("idle");
-      say(`${BIO_ERRORS[err?.name] ?? "Fingerprint did not work."} Dial your code instead.`, "bad");
+      say(`${BIO_ERRORS[err?.name] ?? "Fingerprint did not work."} Enter your code instead.`, "bad");
     }
   }
 
@@ -387,11 +333,11 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
     step("Optional · Fingerprint");
     if (!bioReady) {
       say("Code saved. This browser cannot use a fingerprint reader, so you will use the code.", "ok");
-      showCard(`<p>Fingerprint unlock needs a phone or laptop with a fingerprint (or face) reader and the app's secure address.</p><div class="gate-actions"><button type="button" class="btn" data-open>Open the file</button></div>`);
+      showCard(`<p>Fingerprint unlock needs a phone or laptop with a fingerprint (or face) reader and the app's secure address.</p><div class="gate-actions"><button type="button" class="btn" data-open>Continue</button></div>`);
       return;
     }
     say("Code saved.", "ok");
-    showCard(`<p class="gate-card-title">Add your fingerprint?</p><p>Next time, hold your thumb on the centre of the dial instead of dialling. Your fingerprint never leaves the device.</p>
+    showCard(`<p class="gate-card-title">Add your fingerprint?</p><p>Next time, touch the fingerprint key instead of typing your code. Your fingerprint never leaves the device.</p>
       <div class="gate-actions"><button type="button" class="btn ghost" data-skip-bio>Not now</button><button type="button" class="btn" data-add-bio>Add fingerprint</button></div>`);
   }
 
@@ -421,8 +367,8 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
   function grant(message) {
     clearTimeout(timer);
     setState("granted");
-    say(`${message} Opening the file…`, "ok");
-    step("Access granted");
+    say(`${message} One of the sixteen sunrises you will see today.`, "ok");
+    step("Welcome back");
     setUnlocked(true);
     const finish = () => {
       host.hidden = true;
@@ -434,14 +380,15 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
       resolveOpen = null;
     };
     if (reduceMotion()) { setTimeout(() => { onOpen?.(); finish(); }, 350); return; }
+    // The sun rises over the limb, then the whole screen fades into the app.
+    host.classList.add("opening");
     setTimeout(() => {
       app.inert = false;
       app.removeAttribute("aria-hidden");
       onOpen?.();
-      host.classList.add("opening");
-      setTimeout(() => host.classList.add("open"), 420);
-      setTimeout(finish, 420 + 1250);
-    }, 450);
+      host.classList.add("open");
+      setTimeout(finish, 900);
+    }, 1500);
   }
 
   host.addEventListener("click", (e) => {
@@ -475,12 +422,12 @@ export function createGate({ host, app, crew, onOpen, onReset }) {
     bioReady = await fingerprintAvailable();
     mount();
     enterMode(startMode);
-    // Focus the cover itself so typed digits work at once, without a focus ring on a key.
+    // Focus the screen itself so typed digits work at once, without a focus ring on a key.
     host.tabIndex = -1;
     host.focus({ preventScroll: true });
     if (startMode === "login" && fingerprintSaved() && bioReady && !lockedFor()) {
       // Phones ask for the fingerprint as soon as the lock screen shows. Browsers
-      // need a tap first, so we only light the thumb pad as an invitation.
+      // need a tap first, so we only light the fingerprint key as an invitation.
       $("[data-thumb]").classList.add("invite");
     }
     return new Promise((r) => { resolveOpen = r; });

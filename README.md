@@ -13,7 +13,7 @@ On long missions, astronauts must spot health changes in themselves. CrewCheck t
 | **Trends** | Each indicator over the mission, with its normal and watch ranges, and the days that need a look. |
 | **Future body** | A projection of bone density loss over the mission, built on NASA's published rate, with a countermeasure switch, mission presets and an honest uncertainty range. |
 | **Data & sources** | Every source, which values are verified, the app settings and crew access. |
-| **Crew access** | The app opens like the crew's binder: dial a 4-digit code on the cover's combination dial, or hold your thumb on its centre (fingerprint through the device's own reader). |
+| **Crew access** | A night view of Earth from orbit greets the crew member by name. Enter a 4-digit code or use the fingerprint key (the device's own reader); the sun rises over the horizon as the app opens. |
 
 ### What makes it different
 
@@ -39,17 +39,17 @@ npm test
 ## Project structure
 
 ```
-index.html            app shell: masthead, binder page, index tabs
-css/styles.css        "Flight Data File" design: tokens, day and night themes, components
-js/gate.js            login: binder cover, combination dial, fingerprint thumb plate
+index.html            app shell: sky, header, navigation
+css/styles.css        "Earthlight" design: tokens and components
+js/gate.js            access screen: greeting, keypad, fingerprint key, sunrise
 js/auth.js            code hashing, wrong-try lockout, fingerprint (WebAuthn) checks
-js/brand.js           mission patch logo
+js/brand.js           CrewCheck mark
 js/main.js            views, navigation and events
 js/rules.js           health rules: missing, plausible, jump, ranges, personal baseline, streaks
 js/ppg.js             camera heart rate: filtering, beat detection, signal-quality score
 js/camera.js          camera heart-rate sheet: camera and torch, live waveform
 js/forecast.js        Future body projection
-js/body.js            body as a technical drawing (SVG)
+js/body.js            body map (SVG)
 js/charts.js          trend and projection charts (SVG, no libraries)
 js/store.js           loading data, saving to the browser
 data/indicators.json  ranges, texts and actions for each indicator

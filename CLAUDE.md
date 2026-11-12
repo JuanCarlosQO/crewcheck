@@ -13,20 +13,20 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 
 | File | Role |
 | --- | --- |
-| `index.html` | Shell: masthead (patch, data plate, GMT clock, pulse strip, Lock), binder page, index tabs, gate host |
-| `css/styles.css` | "Flight Data File" design tokens (day shift and night cabin), all components, the cover, print styles |
+| `index.html` | Shell: sky (stars, Earth's limb), header (mark, navigation, GMT clock, pulse, Lock), page, gate host |
+| `css/styles.css` | "Earthlight" design tokens, all components, the access screen, responsive and print styles |
 | `js/auth.js` | Crew access, pure and tested: code rules, PBKDF2 hash, wrong-try lockout, WebAuthn assertion check |
-| `js/gate.js` | Login screen: the binder cover with the combination dial and the fingerprint thumb plate |
-| `js/brand.js` | The mission patch logo (SVG) |
+| `js/gate.js` | Access screen: night Earth, ISS orbit, greeting, keypad with fingerprint key, sunrise on entry |
+| `js/brand.js` | The CrewCheck mark (Earth, gold orbit, station) as SVG |
 | `js/main.js` | Views (`#today`, `#checkin`, `#trends`, `#future`, `#data`), router, events |
 | `js/rules.js` | Pure health rules: missing → plausible → camera signal quality → jump → ranges → personal baseline → streak |
 | `js/ppg.js` | Camera heart rate signal processing (pure, tested): resample, band-pass, peaks, quality score |
 | `js/camera.js` | Camera heart-rate sheet: `getUserMedia`, torch, finger detection, live waveform |
 | `js/forecast.js` | Future body projection (bone loss = published monthly rate × months) |
 | `js/hazards.js` | The five NASA hazards, mission dose, career band, storm alert |
-| `js/body.js` | Body as a technical drawing (outline, centre line, hatch patterns per status, numbered balloons) |
+| `js/body.js` | Body map (outline, centre line, hatch patterns per status, numbered markers) |
 | `js/charts.js`, `js/fx.js` | SVG charts; count-up, sparkline, timelapse |
-| `fonts/` | Big Shoulders, Atkinson Hyperlegible Next, Martian Mono (OFL), self-hosted so the app works offline |
+| `fonts/` | Instrument Serif and Manrope (OFL), self-hosted so the app works offline |
 | `js/store.js` | Loading data, CSV parsing, localStorage |
 | `data/*.json`, `data/mission_demo.csv` | All medical content and sources; the team edits these, not the code |
 
@@ -35,13 +35,13 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 - **No invented numbers.** A value shown as fact needs a source in `data/` and in `docs/DATA_SOURCES.md`. Without one it is shown as "Pending check" or "No number yet". App-chosen thresholds are labelled as app rules.
 - **Measurement before health.** Impossible values and sudden jumps become "Measure again", never an alarm.
 - **Demo data is labelled** as demo and never mixed with real data.
-- **Design identity:** "Flight Data File" — the app is the crew's own binder of printed procedures: warm paper with grain, punched page with index tabs, ink drawings, International Orange for actions, ECG paper for charts, Big Shoulders + Atkinson Hyperlegible Next + Martian Mono. Status always has a word and a shape as well as a colour. Respect `prefers-reduced-motion`. Full rationale in `docs/DESIGN.md`; keep new UI inside it (no glass, glow or gradients-for-decoration).
+- **Design identity:** "Earthlight" (chosen by Juan Carlos from three mockups on 12 November) — low Earth orbit at night: near-black blue, the Earth's limb glowing under the header, gold (`--gold`) as the only action colour, Instrument Serif for titles and key numbers, Manrope for the rest, slow physical motion (orbit, drawing lines, sunrise on sign-in). Serious and beautiful, not playful: no bouncing, mascots or confetti. Status always has a word and a shape as well as a colour. Respect `prefers-reduced-motion`. Full rationale in `docs/DESIGN.md`.
 - **Crew access:** the app opens behind a binder cover with a 4-digit code (stored only as a salted PBKDF2 hash) and an optional fingerprint (WebAuthn platform authenticator, checked on the device). It is a device lock, not encryption: say so honestly wherever it comes up. Fingerprint only works over https on a device with a reader.
 - Commits end with the Co-Authored-By line for Claude. `docs/AI_USE.md` records AI use for the submission form; keep it accurate.
 
 ## Status (11 November 2026)
 
-Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, camera heart rate (code done and tested with a simulated camera; still to test on real phones), full redesign as a Flight Data File with crew access login (code + fingerprint), 49 passing tests.
+Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, camera heart rate (code done and tested with a simulated camera; still to test on real phones), "Earthlight" design with crew access login (code + fingerprint), 49 passing tests.
 
 ## Next tasks
 

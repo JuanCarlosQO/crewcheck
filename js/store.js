@@ -44,7 +44,7 @@ export async function loadDemo() {
   return parseMissionCSV(await res.text());
 }
 
-const DEFAULT_SETTINGS = { name: "Demo astronaut", place: "iss", exerciseTarget: 120, priorDose: 0 };
+const DEFAULT_SETTINGS = { name: "Commander", place: "iss", exerciseTarget: 120, priorDose: 0 };
 
 export function readState() {
   try {

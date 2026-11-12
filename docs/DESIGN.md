@@ -1,64 +1,57 @@
-# CrewCheck design: "Flight Data File"
+# CrewCheck design: "Earthlight"
 
-On the space station, every procedure the crew follows is printed in the **Flight Data File**: ring binders of checklists and cue cards with coloured index tabs, rubber-stamped, annotated in pencil and read under cabin lights. CrewCheck is designed as the crew's own personal volume of that file. Every visual choice below comes from that one idea, so the app looks like an object from the mission instead of a generic dashboard.
+The app is seen from where the crew lives: low Earth orbit, on the night side. The thin blue line of the atmosphere curves under the header of every screen, city lights glow on the planet below, and on the access screen the station crosses the sky. When the crew member signs in, the sun rises over the horizon. The station sees about sixteen sunrises a day, and the access screen says so.
+
+The team chose this direction from three mockups (Docking, Earthlight, White Room) for being beautiful, calm and futuristic without looking like a game.
 
 ## Materials
 
-| Element | What it is in the app | Why |
+| Element | In the app | Why |
 | --- | --- | --- |
-| Paper | Warm uncoated stock with grain (`--page`, `--grain`) | Printed procedures, not screens. Readable in bright light. |
-| The page | One big sheet, punched for three rings, with a salmon margin line and sheets stacked underneath | Every view is a page of the binder. |
-| Index tabs | Manila, salmon, sky, sage and butter dividers sticking out of the page (bottom edge on phones) | Navigation you can find without reading. The open tab joins the page. |
-| Ink | Near-black, never pure black. Drawings in 0.9–1.6 px lines | Technical drawing conventions. |
-| International Orange | `--orange`, used only for actions, the current position and things you must not miss | The colour of spacecraft safety markings. |
-| ECG paper | Salmon millimetre grid with a heavier line every fifth square | Trend charts, the masthead pulse strip and the camera measurement are drawn on it. |
-| Engineering paper | Fine blue-grey grid | The body drawing. |
-
-Night mode ("night cabin") keeps the same materials under dim cabin lighting: charcoal board, cream ink, orange that glows a little more.
+| Night | Near-black blue (`--bg #02040b`), never pure black, a few quiet stars | Calm, readable in a dark cabin, lets the data stand out |
+| The limb | The curve of the Earth under the header, with a soft blue atmosphere glow and city lights | Places every screen in orbit without decorating the content |
+| Gold | `--gold #f4c27a`, sunlight on the limb | The one colour for actions, focus and the current position |
+| Panels | Dark, slightly translucent, thin borders, 22 px corners | Quiet containers that never compete with the numbers |
+| ECG paper | A faint teal millimetre grid | Trend charts and the camera pulse measurement |
 
 ## Type
 
-| Face | Use | Why |
-| --- | --- | --- |
-| **Big Shoulders** (condensed, after Chicago industrial signage) | Titles, values, buttons, all caps | Big, narrow, readable at arm's length. |
-| **Atkinson Hyperlegible Next** | Body text | Drawn by the Braille Institute for low-vision readers. Right for a health tool used by tired people in odd light. |
-| **Martian Mono** (variable width, set at 87.5 %) | Labels, procedure numbers, units, metadata | The voice of printed forms. |
+| Face | Use |
+| --- | --- |
+| **Instrument Serif** (with italics) | Titles, greetings and the numbers that matter (values, dose, projection range) |
+| **Manrope** | Everything else: labels, body text, buttons, navigation |
 
-The fonts are stored in `fonts/` (SIL Open Font License, licences included), so the app looks the same offline, far from Earth.
+Both are stored in `fonts/` (SIL Open Font License, licences included), so the app looks the same offline.
 
 ## Status: word, shape and colour
 
-Status never relies on colour alone. Each one has a shape and a word everywhere it appears:
+Status never relies on colour alone. Every status has a word and a shape:
 
 | Status | Shape | Colour |
 | --- | --- | --- |
-| Normal | ● circle | green |
-| Watch | ▲ triangle | caution amber |
-| Act now | octagon (a stop sign) | warning red, blinking slowly |
-| Measure again | ◌ open ring | blue |
+| Normal | ● circle | soft teal `#8fd8c4` |
+| Watch | ▲ triangle | orange `#ff9f5a` |
+| Act now | octagon | coral red `#ff7b6b`, pulsing slowly |
+| Measure again | ◌ open ring | blue `#8fb4ff` |
 | No reading | — dash | grey |
 | No number yet | hatched square | grey hatch |
 
-On the body drawing the fill pattern repeats the status (plain, diagonal lines, cross-hatch, dots), so the drawing still reads in black and white or for colour-blind crew.
+On the body map the fill pattern repeats the status (plain, diagonal lines, cross-hatch, dots).
 
-## Signature pieces
+## Screens
 
-- **The cover (login).** The app opens as the binder's orange cover: rings on the left, a black elastic strap marked *Sealed · Crew only*, a label plate *Issued to* the crew member, and a **combination dial** printed on it. The ten digits sit around the dial like a safe's; an orange needle swings to each digit you press. The centre of the dial is the **thumb plate** for the fingerprint. When access is granted the strap slides off and the cover swings open on its rings (3D), showing the inside board and then the page underneath, where the body drawing plots itself in.
-- **The mission patch.** Crews design an embroidered patch for every flight. Ours is a check mark flown as a trajectory: it leaves the planet's limb, bends at the low point and climbs to the spacecraft at its tip. Stitching runs around the rim; the large version has a lettered band (`js/brand.js`).
-- **The body as a technical drawing.** Ink outline, dash-dot centre line, corner marks, a title block (*Fig. 1 · Crew member · front view · Day 30*) and numbered balloons, read top to bottom like a drawing's parts list. On wide screens it draws itself in like a pen plotter.
-- **Caution and warning panel.** The day's status is an annunciator: a grid of lamps (HR, BP, TEMP, GLU, SPO2, SLEEP, MOOD, RAD). Watch lamps light amber; Act now lamps flash like a master alarm. Next to it, a rubber stamp with the overall status and the day.
-- **Procedures.** "What to do now" is a numbered procedure. The daily log is a checklist: each step has a number (2.01, 2.02 …) and a box that gets an orange pencil tick when a value is in.
-- **Hardware controls.** Buttons are key caps that press down; the countermeasure switch is a lever; the mission slider is a ruler.
-- **Small things.** Station time in GMT (the station's time zone) on the masthead, warning-tape stripes on the radiation card during a solar storm, a barcode on the cover, card codes (C&W, PROC, RAD) on tabs above each card, and a print stylesheet so a page prints like a page of the file.
+- **Access.** The night side of Earth fills the bottom of the screen, the ISS crosses on a dotted orbit, and the crew member is greeted by name ("Good evening, Commander"). Four gold dots fill as the code is typed on a quiet keypad. The fingerprint key sits in the keypad's corner. On success, the sun rises over the limb and the screen fades into the app. Setting a code, confirming it, wrong-code lockout and "Forgot your code?" all happen on the same screen.
+- **Today.** A sentence answers "how am I today?" ("Mostly good today, Commander." plus which readings to look at). Thin concentric rings show each body system, with a legend of words. Below that come one gold action ("Start today's check-in"), the mission days, the five hazards, the body map, what to do now, radiation, and every reading as a row with its value, a small trend line and the reason.
+- **Check-in, Trends, Future body, Sources** keep the same language: serif titles, thin panels, gold for the one thing to do.
 
 ## Motion
 
-Motion imitates physical things: the cover swinging open, the strap sliding off, the dial needle, a stamp landing, pen strokes plotting, key caps pressing. Everything is switched off with `prefers-reduced-motion`; then the cover simply fades and nothing moves.
+Motion is slow and physical: the Earth drifts, stars twinkle, the station orbits, rings and lines draw themselves in, the body outline is plotted, and the sun rises on entry. Nothing bounces. Everything stops with `prefers-reduced-motion`; the access screen then simply fades.
 
 ## Accessibility checklist
 
 - Status always has a word and a shape as well as a colour.
-- Every touch target is at least 44 px; the dial keys are 42–52 px.
-- The dial works with the keyboard: type the digits, Backspace deletes, Escape clears.
-- The cover is a modal dialog; the app behind it is `inert` until it opens.
-- Live regions announce check-in results, gate messages and the camera measurement.
+- Touch targets are at least 44 px; keypad keys are 62 px tall.
+- The keypad works with the keyboard: type the digits, Backspace deletes, Escape clears.
+- The access screen is a modal dialog; the app behind it is `inert` until access is granted.
+- Live regions announce check-in results, access messages and the camera measurement.

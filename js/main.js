@@ -7,7 +7,7 @@ import { HAZARDS, hazardStatus, missionDose, careerBand, stormAlert } from "./ha
 import { openPulseSheet } from "./camera.js";
 import { countUp, sparkline, playTimelapse, reduceMotion } from "./fx.js";
 import { createGate, isUnlocked, fingerprintAvailable, fingerprintSaved, enrolFingerprint, forgetFingerprint } from "./gate.js";
-import { patchSVG } from "./brand.js";
+import { markSVG } from "./brand.js";
 
 const STATUS = {
   green: { label: "Normal" },
@@ -43,29 +43,36 @@ const resultsFor = (day) => app.days.find((d) => d.day === day)?.results ?? {};
 const entryFor = (day) => app.state.entries.find((e) => e.day === day);
 const stagger = (i) => `style="--i:${i}"`;
 
-// Every view opens like a page of the Flight Data File: section number,
-// running metadata, a big title and a double rule.
-const SECTIONS = { today: [1, "Body scan"], checkin: [2, "Daily log"], trends: [3, "Trends"], future: [4, "Future body"], data: [5, "Sources"] };
+// Every view opens the same way: a quiet line of context, a serif title and
+// an optional lead sentence.
+const SECTIONS = { today: "Today", checkin: "Check-in", trends: "Trends", future: "Future body", data: "Sources" };
 function head(view, { meta = [], title, aside = "", lead = "" }) {
-  const [n, name] = SECTIONS[view];
   return `<header class="view-head" ${stagger(0)}>
-    <div class="vh-meta"><span class="sec">Sec ${n}</span><span>${name}</span>${meta.filter(Boolean).map((m) => `<span class="sep" aria-hidden="true"></span><span>${m}</span>`).join("")}</div>
+    <p class="vh-meta"><span>${SECTIONS[view]}</span>${meta.filter(Boolean).map((m) => `<span class="dot" aria-hidden="true"></span><span>${m}</span>`).join("")}</p>
     <div class="vh-main"><h1>${title}</h1>${aside}</div>
     ${lead ? `<p class="lead">${lead}</p>` : ""}
   </header>`;
 }
 
-// Short lamp names for the caution and warning panel.
-const LAMP = { heart_rate: "HR", blood_pressure: "BP", temperature: "TEMP", glucose: "GLU", spo2: "SPO2", sleep: "SLEEP", mood: "MOOD", radiation: "RAD" };
-const LAMP_WORD = { green: "Normal", yellow: "Watch", red: "Act now", verify: "Recheck", missing: "No data" };
-function annunciator(results) {
-  return `<div class="annunciator" role="list" aria-label="Indicator lamps">${app.data.indicators.map((i) => {
-    const st = results[i.id]?.status ?? "missing";
-    return `<span class="lamp s-${st}" role="listitem" aria-label="${esc(i.name)}: ${STATUS[st].label}" title="${esc(i.name)}"><b>${LAMP[i.id] ?? esc(i.id.slice(0, 4).toUpperCase())}</b><small>${LAMP_WORD[st] ?? ""}</small></span>`;
-  }).join("")}</div>`;
+// One thin ring per body system, innermost last. A full ring is normal; the
+// ring shortens as the status gets worse, and the colour and word say why.
+const RING_SHARE = { green: 1, yellow: 0.7, verify: 0.55, red: 0.4, missing: 0 };
+function systemRings(results) {
+  const list = app.data.systems
+    .map((s) => ({ s, status: systemStatus(app.data.indicators, s.id, results) }))
+    .filter((x) => x.status !== "none");
+  const rings = list.map((x, i) => {
+    const r = 64 - i * 11.5;
+    const c = 2 * Math.PI * r;
+    const len = c * RING_SHARE[x.status];
+    return `<circle class="ring-track" cx="70" cy="70" r="${r}"/><circle class="ring s-${x.status}" cx="70" cy="70" r="${r}" stroke-dasharray="${len.toFixed(1)} ${c.toFixed(1)}" style="--len:${len.toFixed(1)}; --i:${i}"/>`;
+  }).join("");
+  const legend = list.map((x) => `<li class="s-${x.status}"><span>${esc(x.s.name)}</span><span class="rl-state"><i class="g" aria-hidden="true"></i>${STATUS[x.status].label}</span></li>`).join("");
+  const label = list.map((x) => `${x.s.name}: ${STATUS[x.status].label}`).join("; ");
+  return `<div class="rings" role="img" aria-label="${esc(label)}"><svg viewBox="0 0 140 140" aria-hidden="true"><g transform="rotate(-90 70 70)">${rings}</g></svg></div><ul class="ring-legend">${legend}</ul>`;
 }
 
-const titleBlock = (fig, title, day) => `<div class="title-block"><span><small>Fig.</small><b>${fig}</b></span><span><small>Title</small><b>${title}</b></span><span><small>Day</small><b>${day}</b></span></div>`;
+const titleBlock = (fig, title, day) => `<p class="fig-caption"><span>Fig. ${fig}</span><span>${title}</span><span>Day ${day}</span></p>`;
 
 function recompute() {
   app.state.entries.sort((a, b) => a.day - b.day);
@@ -107,12 +114,12 @@ function tile(ind, r, day, i) {
   const sts = upto.map((d) => d.results[ind.id].status);
   const confirm = r.trust === "jump" ? `<button class="btn tiny" data-confirm="${ind.id}" data-day="${day}">Re-measured, it is correct</button>` : "";
   const fix = r.trust === "impossible" || r.trust === "low_signal" || r.status === "missing" ? `<button class="btn tiny ghost" data-edit-day="${day}">Enter reading</button>` : "";
-  return `<article class="tile s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
-    <div class="tile-top"><div><span class="code">1.${String(i + 1).padStart(2, "0")}</span><h3>${esc(ind.name)}</h3></div>${pill(r.status)}</div>
-    <p class="tile-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span>${r.measured?.method === "camera" ? `<span class="tag">Camera estimate</span>` : ""}</p>
-    ${sparkline(vals, sts)}
-    <p class="tile-reason">${esc(r.reasons[0])}</p>
-    <div class="tile-actions">${confirm}${fix}<button class="link" data-trend="${ind.id}">Trend →</button></div>
+  return `<article class="reading s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
+    <div class="r-name"><h3>${esc(ind.name)}</h3>${pill(r.status)}</div>
+    <p class="r-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span>${r.measured?.method === "camera" ? `<span class="tag">Camera estimate</span>` : ""}</p>
+    <div class="r-spark">${sparkline(vals, sts)}</div>
+    <p class="r-reason">${esc(r.reasons[0])}</p>
+    <div class="r-actions">${confirm}${fix}<button class="link" data-trend="${ind.id}">Trend</button></div>
   </article>`;
 }
 
@@ -201,7 +208,6 @@ function radiationPanel(day) {
     : `Offline: showing archived NASA DONKI events. Most recent in the archive: ${fmtDate(app.sw.archive[0].time)}.`;
   const replayEvent = app.sw.archive.find((e) => e.id.startsWith("2024-05-11")) ?? app.sw.archive[0];
   return `<div class="panel rad-panel ${r.storm ? "storm" : ""}" ${stagger(4)}>
-    <span class="card-code" aria-hidden="true">RAD</span>
     <div class="panel-head"><h2>Radiation</h2>${r.storm ? pill("red", "Shelter now") : pill(r.status, "Career dose")}</div>
     <div class="dose">
       <p class="dose-num"><span class="num" data-count="${r.dose.toFixed(1)}" data-dec="1">${r.dose.toFixed(1)}</span><span class="unit">mSv this career</span></p>
@@ -214,17 +220,24 @@ function radiationPanel(day) {
   </div>`;
 }
 
+const GREETING = { green: "You're in good shape,", yellow: "Mostly good today,", verify: "Let's measure again,", red: "Act now,", missing: "No readings yet," };
+
 function viewToday() {
   const day = app.ui.day;
+  const name = esc(app.state.settings.name);
   if (!app.days.length) {
-    return `<section class="view">${head("today", { title: "No readings <em>yet</em>" })}<div class="panel empty"><h2>The file is empty</h2><p>Start with today's log, or load the demo mission from Sources.</p><a class="btn" href="#checkin">Start the log</a></div></section>`;
+    return `<section class="view">${head("today", { title: `<em>${GREETING.missing}</em><br>${name}.` })}<div class="panel empty"><p class="lead">Start with today's check-in, or load the demo mission from Sources.</p><a class="btn big" href="#checkin">Start today's check-in</a></div></section>`;
   }
   const results = resultsFor(day);
   const entry = entryFor(day);
   const sum = summary(results);
   const storm = radiationState(day).storm;
   const overall = storm ? "red" : sum.overall;
-  const headline = storm ? `Solar storm: go to the shelter. ${sum.headline}` : sum.headline;
+  const flagged = app.data.indicators.filter((i) => ["yellow", "red", "verify"].includes(results[i.id]?.status));
+  const lead = (storm ? "Solar storm: go to the shelter now. " : "")
+    + (flagged.length
+      ? `${flagged.length === 1 ? "One reading" : `${flagged.length} readings`} to look at today: ${flagged.map((i) => i.name.toLowerCase()).join(", ")}.`
+      : sum.overall === "missing" ? "Nothing logged for this day yet." : "Every reading is in range.");
   const sel = app.ui.system;
   const sysInfo = sel ? app.data.systems.find((s) => s.id === sel) : null;
   const actions = (storm ? `<li class="s-red" ${stagger(0)}><div><div class="a-top"><strong>Space radiation</strong>${pill("red")}</div><p>${esc(app.radiation.shelter)}</p></div></li>` : "") + actionItems(results);
@@ -232,39 +245,40 @@ function viewToday() {
     .filter((ind) => !sel || ind.system === sel)
     .map((ind, i) => tile(ind, results[ind.id], day, i)).join("");
   const demo = entry?.source === "demo";
+  const place = PLACES[app.state.settings.place];
 
   return `<section class="view today">
     ${head("today", {
-      meta: [demo ? `<span class="src-demo">Demo data</span>` : "Your log", `${sum.normal} of ${app.data.indicators.length} normal`],
-      title: `Mission day <em>${day}</em>`,
+      meta: [`Day ${day} · ${esc(place.name)}`, demo ? `<span class="src-demo">Demo data</span>` : "Your log"],
+      title: `<em>${GREETING[overall]}</em><br>${name}.`,
+      lead: esc(lead),
       aside: `<div class="stepper" role="group" aria-label="Change day">
-        <button class="round" data-day-step="-1" aria-label="Previous day" ${day <= app.days[0].day ? "disabled" : ""}>‹</button>
-        <span class="stepper-label" aria-hidden="true">Day</span>
-        <button class="round" data-day-step="1" aria-label="Next day" ${day >= lastDay() ? "disabled" : ""}>›</button>
+        <button class="round" data-day-step="-1" aria-label="Previous day" ${day <= app.days[0].day ? "disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <span class="stepper-label">Day ${day}</span>
+        <button class="round" data-day-step="1" aria-label="Next day" ${day >= lastDay() ? "disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>`,
     })}
+    <section class="overview" aria-label="Body systems today" ${stagger(1)}>
+      ${systemRings(results)}
+      <div class="ov-cta">
+        <a class="btn big" href="#checkin">Start today's check-in<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <p class="ov-count"><span class="num" data-count="${sum.normal}">${sum.normal}</span> of ${app.data.indicators.length} readings normal</p>
+      </div>
+    </section>
     ${missionStrip(day)}
     ${hazardRow(day, results)}
     <div class="scan-grid">
-      <div class="panel drawing-panel" ${stagger(1)}>
+      <div class="panel drawing-panel" ${stagger(2)}>
         <div class="drawing" data-mode="today">
           <div class="fig-box">${figureSVG("today")}<div class="callouts">${calloutsHTML("today", calloutInfoToday(results))}</div></div>
         </div>
-        <div class="drawing-foot">
-          ${titleBlock(1, "Crew member · front view", day)}
-          <div class="drawing-note">${sysInfo
-            ? `<div><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p></div><div class="note-actions">${sel === "bones" ? `<a class="btn tiny" href="#future">Open Future body</a>` : ""}<button class="btn tiny ghost" data-system-clear>Show all</button></div>`
-            : `<p class="muted small">Tap a numbered balloon or a part of the body to focus on it. The fill pattern repeats the status: plain is normal, lines watch, cross-hatch act now, dots measure again.</p>`}</div>
-        </div>
+        ${titleBlock(1, "Body map", day)}
+        <div class="drawing-note">${sysInfo
+          ? `<div><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p></div><div class="note-actions">${sel === "bones" ? `<a class="btn tiny" href="#future">Open Future body</a>` : ""}<button class="btn tiny ghost" data-system-clear>Show all</button></div>`
+          : `<p class="muted small">Tap a numbered marker or a part of the body to focus on it. The fill repeats the status: plain is normal, lines watch, cross-hatch act now, dots measure again.</p>`}</div>
       </div>
       <div class="side">
-        <div class="panel status-panel s-${overall}" ${stagger(2)}>
-          <span class="card-code" aria-hidden="true">C&amp;W</span>
-          ${annunciator(results)}
-          <div class="status-text"><span class="stamp s-${overall}">${STATUS[overall].label}<small>Day ${day}</small></span><p class="headline">${esc(headline)}</p></div>
-        </div>
         <div class="panel actions-panel" ${stagger(3)}>
-          <span class="card-code" aria-hidden="true">PROC</span>
           <h2>What to do now</h2>
           ${actions ? `<ol class="action-list">${actions}</ol>` : `<p class="muted">Nothing to do. Keep your routine: exercise, meals and sleep on schedule.</p>`}
         </div>
@@ -272,7 +286,7 @@ function viewToday() {
       </div>
     </div>
     <h2 class="section-title" ${stagger(5)}>Readings</h2>
-    <div class="tiles">${tiles || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
+    <div class="readings">${tiles || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
   </section>`;
 }
 
@@ -449,7 +463,6 @@ function viewTrends() {
       <p class="axis-caption">Horizontal axis: mission day. ${esc(ind.whatIs)} Related hazard: ${esc(ind.hazard)}.</p>
     </div>
     <div class="panel" ${stagger(3)}>
-      <span class="card-code" aria-hidden="true">${flagged.length} FLAGGED</span>
       <h2>Days that need a look</h2>
       ${flagged.length ? `<ul class="flag-list">${flagged.map((d) => { const r = d.results[ind.id]; return `<li><button class="link" data-goto-day="${d.day}">Day ${d.day}</button><span class="num">${formatValue(ind, r.value)}</span>${pill(r.status)}<span class="muted">${esc(r.reasons[0])}</span></li>`; }).join("")}</ul>` : `<p class="muted">Every day is in the normal range.</p>`}
     </div>
@@ -475,7 +488,6 @@ function futureParts() {
 
   const range = `<span class="range"><span class="range-num">${cm && p.uncertainCountermeasure ? "0.0" : "−" + fmt(p.low)}</span><span class="range-to">to</span><span class="range-num">−${fmt(p.high)}</span><span class="range-unit">%</span></span>`;
   const readout = `
-    <span class="card-code" aria-hidden="true">PROJ</span>
     <div class="readout-top"><p class="kicker">Bones · spine &amp; hips · day ${day}</p>${pill(band, FORECAST_LABEL[band])}</div>
     ${range}
     <p class="readout-sub">${cm && p.uncertainCountermeasure ? "Exercise helps, but NASA has not published by how much, so the range starts at no loss." : "Bone density compared with before flight."}</p>
@@ -628,7 +640,6 @@ function viewData() {
         <div class="form-actions"><button class="btn" type="submit">Save settings</button><span class="saved muted" aria-live="polite"></span></div>
       </form>
       <div class="panel" ${stagger(5)}>
-        <span class="card-code" aria-hidden="true">LOG</span>
         <h2>Your log</h2>
         <p class="muted">Everything is stored only in this browser, so the app works without a connection to Earth.</p>
         <div class="form-actions"><button class="btn ghost" data-reload-demo>Load the demo mission</button><button class="btn ghost danger" data-clear>Start an empty log</button></div>
@@ -646,7 +657,6 @@ function accessPanel() {
     ? `<button class="btn tiny ghost danger" data-access="remove-bio">Remove fingerprint</button>`
     : app.bio ? `<button class="btn tiny ghost" data-access="add-bio">Add fingerprint</button>` : "";
   return `<div class="panel" ${stagger(6)}>
-    <span class="card-code" aria-hidden="true">ACCESS</span>
     <h2>Crew access</h2>
     <ul class="access-list">
       <li><div><strong>Crew code</strong><span class="muted">Four digits. Only a salted hash is stored, never the code.</span></div><button class="btn tiny ghost" data-access="change">Change code</button></li>
@@ -657,20 +667,19 @@ function accessPanel() {
   </div>`;
 }
 
-/* ---------- Shell: masthead, tabs, router ---------- */
+/* ---------- Shell: header, navigation, router ---------- */
 
 function updateHud() {
   const place = PLACES[app.state.settings.place];
-  $("#mast-crew").textContent = app.state.settings.name;
   $("#mast-place").textContent = place.name;
-  $("#mast-day").textContent = String(lastDay()).padStart(3, "0");
+  $("#mast-day").textContent = `Day ${lastDay()}`;
   const latest = [...app.days].reverse().map((d) => d.results.heart_rate).find((r) => r?.trust === "ok");
   const hr = latest?.num ?? 70;
   $("#hud-hr").textContent = latest ? Math.round(hr) : "--";
   $("#hud-pulse").style.setProperty("--beat", `${((2 * 60) / hr).toFixed(2)}s`);
 }
 
-// The station keeps Greenwich Mean Time, so the masthead clock does too.
+// The station keeps Greenwich Mean Time, so the header clock does too.
 function tickClock() {
   const t = new Date();
   const el = $("#mast-clock");
@@ -870,7 +879,7 @@ async function start() {
     app.ui.futureDay = mission?.days ?? 180;
     recompute();
     saveState(app.state);
-    $("#mast-patch").innerHTML = patchSVG();
+    $("#mast-mark").innerHTML = markSVG();
     tickClock();
     setInterval(tickClock, 15000);
     app.bio = await fingerprintAvailable();
