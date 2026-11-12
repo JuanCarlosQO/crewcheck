@@ -23,7 +23,7 @@ function sheetHTML(minQuality) {
       <div><p class="kicker">Camera pulse</p><h2>Measure with camera</h2></div>
       <button class="round ppg-x" value="cancel" aria-label="Close">×</button>
     </div>
-    <div class="holo ppg-screen">
+    <div class="ppg-screen">
       <canvas class="ppg-wave" aria-hidden="true"></canvas>
       <div class="ppg-readout">
         <p class="ppg-bpm"><strong class="num" data-bpm>--</strong><span>bpm</span></p>
@@ -59,13 +59,19 @@ function drawWave(canvas, samples, now) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   const css = getComputedStyle(canvas);
-  const ink = css.getPropertyValue("--scr-holo").trim() || "#3fe9f7";
-  const grid = css.getPropertyValue("--scr-line").trim() || "rgba(63,233,247,.13)";
+  const ink = css.getPropertyValue("--trace").trim() || "#1b1c1e";
+  const minor = css.getPropertyValue("--ecg-grid").trim() || "rgba(222,92,68,.17)";
+  const major = css.getPropertyValue("--ecg-major").trim() || "rgba(222,92,68,.38)";
 
-  ctx.strokeStyle = grid;
-  ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); ctx.stroke(); }
-  for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke(); }
+  // ECG paper: a fine 6 px grid with a heavier line every fifth square.
+  for (const [step, colour] of [[6, minor], [30, major]]) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x < w; x += step) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
+    for (let y = 0; y < h; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
+    ctx.stroke();
+  }
 
   const windowMs = 5000;
   const recent = samples.filter((s) => s.t > now - windowMs - 1500);
@@ -76,8 +82,6 @@ function drawWave(canvas, samples, now) {
   ctx.strokeStyle = ink;
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
-  ctx.shadowColor = ink;
-  ctx.shadowBlur = 6;
   ctx.beginPath();
   shown.forEach((v, i) => {
     const x = (i / (shown.length - 1)) * w;

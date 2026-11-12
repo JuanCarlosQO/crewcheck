@@ -12,7 +12,8 @@ On long missions, astronauts must spot health changes in themselves. CrewCheck t
 | **Check-in** | A daily form with step-by-step measuring instructions. Each value is checked as it is typed. Heart rate can also be measured with the phone camera (fingertip over the camera and torch), with a live pulse waveform and a signal-quality score. |
 | **Trends** | Each indicator over the mission, with its normal and watch ranges, and the days that need a look. |
 | **Future body** | A projection of bone density loss over the mission, built on NASA's published rate, with a countermeasure switch, mission presets and an honest uncertainty range. |
-| **Data & sources** | Every source, which values are verified, and the app settings. |
+| **Data & sources** | Every source, which values are verified, the app settings and crew access. |
+| **Crew access** | The app opens like the crew's binder: dial a 4-digit code on the cover's combination dial, or hold your thumb on its centre (fingerprint through the device's own reader). |
 
 ### What makes it different
 
@@ -38,22 +39,26 @@ npm test
 ## Project structure
 
 ```
-index.html            app shell
-css/styles.css        design tokens, light and dark themes
+index.html            app shell: masthead, binder page, index tabs
+css/styles.css        "Flight Data File" design: tokens, day and night themes, components
+js/gate.js            login: binder cover, combination dial, fingerprint thumb plate
+js/auth.js            code hashing, wrong-try lockout, fingerprint (WebAuthn) checks
+js/brand.js           mission patch logo
 js/main.js            views, navigation and events
 js/rules.js           health rules: missing, plausible, jump, ranges, personal baseline, streaks
 js/ppg.js             camera heart rate: filtering, beat detection, signal-quality score
 js/camera.js          camera heart-rate sheet: camera and torch, live waveform
 js/forecast.js        Future body projection
-js/body.js            body map (SVG)
+js/body.js            body as a technical drawing (SVG)
 js/charts.js          trend and projection charts (SVG, no libraries)
 js/store.js           loading data, saving to the browser
 data/indicators.json  ranges, texts and actions for each indicator
 data/forecast.json    projection rates and their sources
 data/mission_demo.csv 30-day demo mission (invented data)
 tools/make_demo.py    script that generates the demo mission
-tests/                unit tests for the rules, the projection, the hazards and the camera pulse
-docs/                 data sources and AI use
+fonts/                self-hosted fonts (SIL Open Font License)
+tests/                unit tests: rules, projection, hazards, camera pulse, crew access
+docs/                 data sources, design rationale and AI use
 ```
 
 The medical content lives in `data/`, so the research and content team can change ranges and texts without touching the code.
