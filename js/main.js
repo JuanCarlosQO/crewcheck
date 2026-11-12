@@ -1,11 +1,13 @@
 import { evaluateMission, evaluate, systemStatus, formatValue, worst, SEVERITY } from "./rules.js";
 import { projectLoss, projectionSeries, bandFor, exerciseAdherence, DAYS_PER_MONTH } from "./forecast.js";
 import { loadJSON, loadDemo, readState, saveState, defaultSettings } from "./store.js";
-import { holoSVG, calloutsHTML } from "./body.js";
+import { figureSVG, calloutsHTML } from "./body.js";
 import { trendChart, projectionChart } from "./charts.js";
 import { HAZARDS, hazardStatus, missionDose, careerBand, stormAlert } from "./hazards.js";
 import { openPulseSheet } from "./camera.js";
-import { countUp, bindTilt, bindSpotlight, sparkline, statusRing, playTimelapse, reduceMotion } from "./fx.js";
+import { countUp, sparkline, playTimelapse, reduceMotion } from "./fx.js";
+import { createGate, isUnlocked, fingerprintAvailable, fingerprintSaved, enrolFingerprint, forgetFingerprint } from "./gate.js";
+import { patchSVG } from "./brand.js";
 
 const STATUS = {
   green: { label: "Normal" },
@@ -40,6 +42,30 @@ const lastDay = () => app.days.at(-1)?.day ?? 0;
 const resultsFor = (day) => app.days.find((d) => d.day === day)?.results ?? {};
 const entryFor = (day) => app.state.entries.find((e) => e.day === day);
 const stagger = (i) => `style="--i:${i}"`;
+
+// Every view opens like a page of the Flight Data File: section number,
+// running metadata, a big title and a double rule.
+const SECTIONS = { today: [1, "Body scan"], checkin: [2, "Daily log"], trends: [3, "Trends"], future: [4, "Future body"], data: [5, "Sources"] };
+function head(view, { meta = [], title, aside = "", lead = "" }) {
+  const [n, name] = SECTIONS[view];
+  return `<header class="view-head" ${stagger(0)}>
+    <div class="vh-meta"><span class="sec">Sec ${n}</span><span>${name}</span>${meta.filter(Boolean).map((m) => `<span class="sep" aria-hidden="true"></span><span>${m}</span>`).join("")}</div>
+    <div class="vh-main"><h1>${title}</h1>${aside}</div>
+    ${lead ? `<p class="lead">${lead}</p>` : ""}
+  </header>`;
+}
+
+// Short lamp names for the caution and warning panel.
+const LAMP = { heart_rate: "HR", blood_pressure: "BP", temperature: "TEMP", glucose: "GLU", spo2: "SPO2", sleep: "SLEEP", mood: "MOOD", radiation: "RAD" };
+const LAMP_WORD = { green: "Normal", yellow: "Watch", red: "Act now", verify: "Recheck", missing: "No data" };
+function annunciator(results) {
+  return `<div class="annunciator" role="list" aria-label="Indicator lamps">${app.data.indicators.map((i) => {
+    const st = results[i.id]?.status ?? "missing";
+    return `<span class="lamp s-${st}" role="listitem" aria-label="${esc(i.name)}: ${STATUS[st].label}" title="${esc(i.name)}"><b>${LAMP[i.id] ?? esc(i.id.slice(0, 4).toUpperCase())}</b><small>${LAMP_WORD[st] ?? ""}</small></span>`;
+  }).join("")}</div>`;
+}
+
+const titleBlock = (fig, title, day) => `<div class="title-block"><span><small>Fig.</small><b>${fig}</b></span><span><small>Title</small><b>${title}</b></span><span><small>Day</small><b>${day}</b></span></div>`;
 
 function recompute() {
   app.state.entries.sort((a, b) => a.day - b.day);
@@ -81,9 +107,8 @@ function tile(ind, r, day, i) {
   const sts = upto.map((d) => d.results[ind.id].status);
   const confirm = r.trust === "jump" ? `<button class="btn tiny" data-confirm="${ind.id}" data-day="${day}">Re-measured, it is correct</button>` : "";
   const fix = r.trust === "impossible" || r.trust === "low_signal" || r.status === "missing" ? `<button class="btn tiny ghost" data-edit-day="${day}">Enter reading</button>` : "";
-  return `<article class="tile tilt s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
-    <div class="sheen" aria-hidden="true"></div>
-    <div class="tile-top"><h3>${esc(ind.name)}</h3>${pill(r.status)}</div>
+  return `<article class="tile s-${r.status}" data-system="${ind.system}" ${stagger(i)}>
+    <div class="tile-top"><div><span class="code">1.${String(i + 1).padStart(2, "0")}</span><h3>${esc(ind.name)}</h3></div>${pill(r.status)}</div>
     <p class="tile-value">${valueMarkup(ind, r.value)}<span class="unit">${esc(ind.unit)}</span>${r.measured?.method === "camera" ? `<span class="tag">Camera estimate</span>` : ""}</p>
     ${sparkline(vals, sts)}
     <p class="tile-reason">${esc(r.reasons[0])}</p>
@@ -107,7 +132,7 @@ function actionItems(results) {
       const escalate = r.status === "red"
         ? `<p class="escalate"><strong>Distance from Earth.</strong> From ${esc(place.name.toLowerCase())}, a message to the flight surgeon takes ${esc(place.delay)}. Start these steps now; do not wait for the reply.</p>`
         : "";
-      return `<li class="s-${r.status}" ${stagger(i)}><span class="a-bar" aria-hidden="true"></span><div><div class="a-top"><strong>${esc(ind.name)}</strong>${pill(r.status)}</div><p>${esc(text)}</p>${escalate}</div></li>`;
+      return `<li class="s-${r.status}" ${stagger(i)}><div><div class="a-top"><strong>${esc(ind.name)}</strong>${pill(r.status)}</div><p>${esc(text)}</p>${escalate}</div></li>`;
     }).join("");
 }
 
@@ -176,6 +201,7 @@ function radiationPanel(day) {
     : `Offline: showing archived NASA DONKI events. Most recent in the archive: ${fmtDate(app.sw.archive[0].time)}.`;
   const replayEvent = app.sw.archive.find((e) => e.id.startsWith("2024-05-11")) ?? app.sw.archive[0];
   return `<div class="panel rad-panel ${r.storm ? "storm" : ""}" ${stagger(4)}>
+    <span class="card-code" aria-hidden="true">RAD</span>
     <div class="panel-head"><h2>Radiation</h2>${r.storm ? pill("red", "Shelter now") : pill(r.status, "Career dose")}</div>
     <div class="dose">
       <p class="dose-num"><span class="num" data-count="${r.dose.toFixed(1)}" data-dec="1">${r.dose.toFixed(1)}</span><span class="unit">mSv this career</span></p>
@@ -191,65 +217,67 @@ function radiationPanel(day) {
 function viewToday() {
   const day = app.ui.day;
   if (!app.days.length) {
-    return `<section class="view"><div class="panel empty"><h2>No readings yet</h2><p>Start with today's log, or load the demo mission from Sources.</p><a class="btn" href="#checkin">Start the log</a></div></section>`;
+    return `<section class="view">${head("today", { title: "No readings <em>yet</em>" })}<div class="panel empty"><h2>The file is empty</h2><p>Start with today's log, or load the demo mission from Sources.</p><a class="btn" href="#checkin">Start the log</a></div></section>`;
   }
   const results = resultsFor(day);
   const entry = entryFor(day);
   const sum = summary(results);
-  const stormNow = radiationState(day).storm;
-  const overall = stormNow ? "red" : sum.overall;
-  const headline = stormNow ? `Solar storm: go to the shelter. ${sum.headline}` : sum.headline;
-  const normal = sum.normal;
+  const storm = radiationState(day).storm;
+  const overall = storm ? "red" : sum.overall;
+  const headline = storm ? `Solar storm: go to the shelter. ${sum.headline}` : sum.headline;
   const sel = app.ui.system;
   const sysInfo = sel ? app.data.systems.find((s) => s.id === sel) : null;
-  const storm = radiationState(day).storm;
-  const actions = (storm ? `<li class="s-red" ${stagger(0)}><span class="a-bar" aria-hidden="true"></span><div><div class="a-top"><strong>Space radiation</strong>${pill("red")}</div><p>${esc(app.radiation.shelter)}</p></div></li>` : "") + actionItems(results);
+  const actions = (storm ? `<li class="s-red" ${stagger(0)}><div><div class="a-top"><strong>Space radiation</strong>${pill("red")}</div><p>${esc(app.radiation.shelter)}</p></div></li>` : "") + actionItems(results);
   const tiles = app.data.indicators
     .filter((ind) => !sel || ind.system === sel)
     .map((ind, i) => tile(ind, results[ind.id], day, i)).join("");
-  const ring = statusRing(app.data.indicators.map((i) => results[i.id].status));
+  const demo = entry?.source === "demo";
 
   return `<section class="view today">
-    <div class="view-head" ${stagger(0)}>
-      <div>
-        <p class="kicker">Body scan · ${entry?.source === "demo" ? "demo data" : "your log"}</p>
-        <h1>Mission day <span class="accent">${day}</span></h1>
-      </div>
-      <div class="stepper">
+    ${head("today", {
+      meta: [demo ? `<span class="src-demo">Demo data</span>` : "Your log", `${sum.normal} of ${app.data.indicators.length} normal`],
+      title: `Mission day <em>${day}</em>`,
+      aside: `<div class="stepper" role="group" aria-label="Change day">
         <button class="round" data-day-step="-1" aria-label="Previous day" ${day <= app.days[0].day ? "disabled" : ""}>‹</button>
+        <span class="stepper-label" aria-hidden="true">Day</span>
         <button class="round" data-day-step="1" aria-label="Next day" ${day >= lastDay() ? "disabled" : ""}>›</button>
-      </div>
-    </div>
+      </div>`,
+    })}
     ${missionStrip(day)}
     ${hazardRow(day, results)}
     <div class="scan-grid">
-      <div class="panel holo-panel" ${stagger(1)}>
-        <div class="holo spot" data-mode="today">
-          ${holoSVG("today")}
-          <div class="callouts">${calloutsHTML("today", calloutInfoToday(results))}</div>
+      <div class="panel drawing-panel" ${stagger(1)}>
+        <div class="drawing" data-mode="today">
+          <div class="fig-box">${figureSVG("today")}<div class="callouts">${calloutsHTML("today", calloutInfoToday(results))}</div></div>
         </div>
-        <div class="holo-foot">${sysInfo
-          ? `<div><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p></div><div class="holo-foot-actions">${sel === "bones" ? `<a class="btn tiny" href="#future">Open Future body</a>` : ""}<button class="btn tiny ghost" data-system-clear>Show all</button></div>`
-          : `<p class="muted">Tap a part of the body or a label to focus on it.</p>`}</div>
+        <div class="drawing-foot">
+          ${titleBlock(1, "Crew member · front view", day)}
+          <div class="drawing-note">${sysInfo
+            ? `<div><h3>${esc(sysInfo.name)}</h3><p>${esc(sysInfo.about)}</p></div><div class="note-actions">${sel === "bones" ? `<a class="btn tiny" href="#future">Open Future body</a>` : ""}<button class="btn tiny ghost" data-system-clear>Show all</button></div>`
+            : `<p class="muted small">Tap a numbered balloon or a part of the body to focus on it. The fill pattern repeats the status: plain is normal, lines watch, cross-hatch act now, dots measure again.</p>`}</div>
+        </div>
       </div>
       <div class="side">
         <div class="panel status-panel s-${overall}" ${stagger(2)}>
-          <div class="ring-wrap">${ring}<div class="ring-center"><span class="num" data-count="${normal}">${normal}</span><small>of ${app.data.indicators.length} normal</small></div></div>
-          <div class="status-text"><p class="kicker">Status</p><p class="headline">${esc(headline)}</p>${pill(overall)}</div>
+          <span class="card-code" aria-hidden="true">C&amp;W</span>
+          ${annunciator(results)}
+          <div class="status-text"><span class="stamp s-${overall}">${STATUS[overall].label}<small>Day ${day}</small></span><p class="headline">${esc(headline)}</p></div>
         </div>
         <div class="panel actions-panel" ${stagger(3)}>
+          <span class="card-code" aria-hidden="true">PROC</span>
           <h2>What to do now</h2>
-          ${actions ? `<ul class="action-list">${actions}</ul>` : `<p class="muted">Nothing to do. Keep your routine: exercise, meals and sleep on schedule.</p>`}
+          ${actions ? `<ol class="action-list">${actions}</ol>` : `<p class="muted">Nothing to do. Keep your routine: exercise, meals and sleep on schedule.</p>`}
         </div>
         ${radiationPanel(day)}
       </div>
     </div>
+    <h2 class="section-title" ${stagger(5)}>Readings</h2>
     <div class="tiles">${tiles || `<p class="muted">Bones and muscles are not measured daily. See Future body.</p>`}</div>
   </section>`;
 }
 
 function paintToday(results) {
-  const screen = $('.holo[data-mode="today"]');
+  const screen = $('.drawing[data-mode="today"]');
   if (!screen) return;
   screen.querySelectorAll("[data-system]").forEach((z) => {
     if (z.classList.contains("callout")) return;
@@ -299,31 +327,32 @@ function viewCheckin() {
       ? `<div class="bp-inputs"><input id="f-bp-sys" name="bp_sys" type="number" inputmode="numeric" placeholder="120" value="${prev.blood_pressure?.sys ?? ""}" aria-label="Systolic, top number"><span>/</span><input id="f-bp-dia" name="bp_dia" type="number" inputmode="numeric" placeholder="80" value="${prev.blood_pressure?.dia ?? ""}" aria-label="Diastolic, bottom number"></div>`
       : `<input id="f-${f.id}" name="${f.id}" type="number" inputmode="decimal" step="${f.step}" value="${prev[f.id] ?? ""}" placeholder="—">`;
     return `<div class="module" data-field="${f.id}" ${stagger(i)}>
-      <label for="${f.bp ? "f-bp-sys" : "f-" + f.id}"><span>${esc(ind.name)}</span><span class="unit">${esc(ind.unit)}</span></label>
+      <label for="${f.bp ? "f-bp-sys" : "f-" + f.id}"><span class="chk" aria-hidden="true"></span><span><span class="step-no">2.${String(i + 1).padStart(2, "0")}</span>${esc(ind.name)}</span><span class="unit">${esc(ind.unit)}</span></label>
       ${input}${camera(f)}
       <div class="live" aria-live="polite"></div>
       <details><summary>How to measure</summary><ol>${ind.howToMeasure.map((s) => `<li>${esc(s)}</li>`).join("")}</ol><p class="muted">${esc(ind.whatIs)}</p></details>
     </div>`;
   };
   return `<section class="view checkin">
-    <div class="view-head" ${stagger(0)}>
-      <div><p class="kicker">Daily log</p><h1>${editing ? `Edit day <span class="accent">${day}</span>` : `Log mission day <span class="accent">${day}</span>`}</h1></div>
-    </div>
-    <p class="lead" ${stagger(1)}>Enter what you measured and leave a box empty if you could not measure it. Each value is checked while you type.</p>
+    ${head("checkin", {
+      meta: [editing ? "Correction" : "New entry", `${FIELDS.length + 2} steps`],
+      title: editing ? `Edit day <em>${day}</em>` : `Log day <em>${day}</em>`,
+      lead: "Work down the checklist. Leave a step empty if you could not measure it. Each value is checked as you type, and a tick appears when it is in.",
+    })}
     <form id="checkin-form" novalidate>
       <div class="modules">${FIELDS.map(field).join("")}
         <div class="module" data-field="exercise_min" ${stagger(7)}>
-          <label for="f-exercise_min"><span>Exercise today</span><span class="unit">min</span></label>
+          <label for="f-exercise_min"><span class="chk" aria-hidden="true"></span><span><span class="step-no">2.${String(FIELDS.length + 1).padStart(2, "0")}</span>Exercise today</span><span class="unit">min</span></label>
           <input id="f-exercise_min" name="exercise_min" type="number" inputmode="numeric" step="5" value="${prev.exercise_min ?? ""}" placeholder="—">
           <p class="muted small">Feeds Future body. Mission target: ${app.state.settings.exerciseTarget} minutes.</p>
         </div>
       </div>
       <fieldset class="module mood" data-field="mood" ${stagger(8)}>
-        <legend>How do you feel today?</legend>
+        <legend><span class="chk" aria-hidden="true"></span><span><span class="step-no">2.${String(FIELDS.length + 2).padStart(2, "0")}</span>How do you feel today?</span><span></span></legend>
         <div class="faces">${MOODS.map(([v, label]) => `<label class="face"><input type="radio" name="mood" value="${v}" ${String(prev.mood) === v ? "checked" : ""}><span class="face-btn">${moodFace(v)}<span>${label}</span></span></label>`).join("")}</div>
         <div class="live" aria-live="polite"></div>
       </fieldset>
-      <div class="form-actions"><button class="btn big" type="submit">Save log</button>${editing ? `<button class="btn ghost" type="button" data-cancel-edit>Cancel</button>` : ""}</div>
+      <div class="form-actions submit"><button class="btn big" type="submit">Save day ${day}</button>${editing ? `<button class="btn ghost" type="button" data-cancel-edit>Cancel</button>` : ""}</div>
     </form>
   </section>`;
 }
@@ -412,14 +441,15 @@ function viewTrends() {
   }
   const flagged = app.days.filter((d) => d.results[ind.id].status !== "green");
   return `<section class="view trends">
-    <div class="view-head" ${stagger(0)}><div><p class="kicker">Trends</p><h1>${esc(ind.name)} <span class="unit-h">${esc(ind.unit)}</span></h1></div></div>
+    ${head("trends", { meta: [`${app.days.length} days`, esc(ind.hazard)], title: `${esc(ind.name)} <span class="unit-h">${esc(ind.unit)}</span>` })}
     <div class="segments" role="tablist" ${stagger(1)}>${app.data.indicators.map((i) => `<button role="tab" aria-selected="${i.id === ind.id}" class="segment ${i.id === ind.id ? "active" : ""}" data-trend="${i.id}">${esc(i.name)}</button>`).join("")}</div>
     <div class="panel screen-panel" ${stagger(2)}>
       <ul class="key">${ind.type === "bp" ? `<li><span class="k line0"></span>Top number</li><li><span class="k line1"></span>Bottom number</li><li>Normal: below 120/80</li>` : `<li><span class="k b-green"></span>Normal range</li><li><span class="k b-yellow"></span>Watch range</li>`}<li><span class="k verify"></span>Measure again</li></ul>
-      <div class="screen spot chart-wrap">${trendChart({ series, bands, xMax: Math.max(lastDay(), 2), yMin, yMax, unit: ind.unit, selectedX: app.ui.day })}</div>
+      <div class="graph chart-wrap">${trendChart({ series, bands, xMax: Math.max(lastDay(), 2), yMin, yMax, unit: ind.unit, selectedX: app.ui.day })}</div>
       <p class="axis-caption">Horizontal axis: mission day. ${esc(ind.whatIs)} Related hazard: ${esc(ind.hazard)}.</p>
     </div>
     <div class="panel" ${stagger(3)}>
+      <span class="card-code" aria-hidden="true">${flagged.length} FLAGGED</span>
       <h2>Days that need a look</h2>
       ${flagged.length ? `<ul class="flag-list">${flagged.map((d) => { const r = d.results[ind.id]; return `<li><button class="link" data-goto-day="${d.day}">Day ${d.day}</button><span class="num">${formatValue(ind, r.value)}</span>${pill(r.status)}<span class="muted">${esc(r.reasons[0])}</span></li>`; }).join("")}</ul>` : `<p class="muted">Every day is in the normal range.</p>`}
     </div>
@@ -445,6 +475,7 @@ function futureParts() {
 
   const range = `<span class="range"><span class="range-num">${cm && p.uncertainCountermeasure ? "0.0" : "−" + fmt(p.low)}</span><span class="range-to">to</span><span class="range-num">−${fmt(p.high)}</span><span class="range-unit">%</span></span>`;
   const readout = `
+    <span class="card-code" aria-hidden="true">PROJ</span>
     <div class="readout-top"><p class="kicker">Bones · spine &amp; hips · day ${day}</p>${pill(band, FORECAST_LABEL[band])}</div>
     ${range}
     <p class="readout-sub">${cm && p.uncertainCountermeasure ? "Exercise helps, but NASA has not published by how much, so the range starts at no loss." : "Bone density compared with before flight."}</p>
@@ -468,6 +499,7 @@ function futureParts() {
 function updateFuture() {
   const p = futureParts();
   $("#future-day-num").textContent = p.day;
+  $("#future-tb-day").textContent = p.day;
   $("#future-months").textContent = p.months;
   $("#future-day").value = p.day;
   $("#future-day").style.setProperty("--fill", `${(p.day / FUTURE_MAX_DAY) * 100}%`);
@@ -476,7 +508,7 @@ function updateFuture() {
   ro.innerHTML = p.readout;
   $("#future-chart").innerHTML = p.chart;
   $("#future-key").innerHTML = p.key;
-  $('.holo[data-mode="future"] .callouts').innerHTML = calloutsHTML("future", p.info);
+  $('.drawing[data-mode="future"] .callouts').innerHTML = calloutsHTML("future", p.info);
   document.querySelectorAll(".preset").forEach((b) => b.classList.toggle("active", Number(b.dataset.preset) === p.day));
   paintFuture(p);
 }
@@ -485,25 +517,27 @@ function viewFuture() {
   const f = app.forecast;
   const p = futureParts();
   const qual = f.systems.filter((s) => s.kind === "qualitative").map((s, i) => `
-    <article class="panel qual tilt" ${stagger(i + 5)}>
-      <div class="sheen" aria-hidden="true"></div>
+    <article class="panel qual" ${stagger(i + 5)}>
       <div class="tile-top"><h3>${esc(s.name)}</h3>${pill("hatch")}</div>
       <p>${esc(s.summary)}</p>
       <p class="muted small">${s.source ? `Source: <a href="${esc(s.source.url)}" target="_blank" rel="noopener">${esc(s.source.label)}</a>. ` : "Source pending. "}Research team: ${esc(s.pending)}.</p>
     </article>`).join("");
 
   return `<section class="view future">
-    <div class="view-head" ${stagger(0)}>
-      <div><p class="kicker">Future body</p><h1>Your body on day <span class="accent" id="future-day-num">${p.day}</span></h1>
-      <p class="lead">If the mission goes on like this, how will your body change? Choose a mission, move through time and switch countermeasures on.</p></div>
-    </div>
+    ${head("future", {
+      meta: ["Projection", "Published rates only"],
+      title: `Your body on day <em id="future-day-num">${p.day}</em>`,
+      lead: "If the mission goes on like this, how will your body change? Choose a mission, move through time and switch countermeasures on.",
+    })}
     <div class="scan-grid">
-      <div class="panel holo-panel" ${stagger(1)}>
-        <div class="holo spot" data-mode="future">
-          ${holoSVG("future")}
-          <div class="callouts">${calloutsHTML("future", p.info)}</div>
+      <div class="panel drawing-panel" ${stagger(1)}>
+        <div class="drawing" data-mode="future">
+          <div class="fig-box">${figureSVG("future")}<div class="callouts">${calloutsHTML("future", p.info)}</div></div>
         </div>
-        <div class="holo-foot"><p class="muted">Bones fade and become porous as density is lost. Hatched systems have no published number yet.</p></div>
+        <div class="drawing-foot">
+          ${titleBlock(2, "Projected change", `<span id="future-tb-day">${p.day}</span>`)}
+          <div class="drawing-note"><p class="muted small">Bones fade and break up as density is lost. Hatched systems have no published number yet.</p></div>
+        </div>
       </div>
       <div class="side">
         <div class="panel controls" ${stagger(2)}>
@@ -524,7 +558,7 @@ function viewFuture() {
     </div>
     <div class="panel screen-panel" ${stagger(4)}>
       <div class="panel-head"><h2>Bone density loss over the mission</h2><ul class="key" id="future-key">${p.key}</ul></div>
-      <div class="screen spot chart-wrap" id="future-chart">${p.chart}</div>
+      <div class="graph chart-wrap" id="future-chart">${p.chart}</div>
       <p class="axis-caption">Horizontal axis: days in space. Vertical axis: bone density compared with before flight. ${esc(p.bones.displayBands.note)}</p>
       <blockquote class="source">“${esc(p.bones.lossSource.quote)}” <a href="${esc(p.bones.lossSource.url)}" target="_blank" rel="noopener">${esc(p.bones.lossSource.label)}</a></blockquote>
     </div>
@@ -535,7 +569,7 @@ function viewFuture() {
 }
 
 function paintFuture(p = futureParts()) {
-  const screen = $('.holo[data-mode="future"]');
+  const screen = $('.drawing[data-mode="future"]');
   if (!screen) return;
   const loss = Math.min(1, p.p.mid / 30);
   screen.style.setProperty("--loss", loss.toFixed(3));
@@ -555,7 +589,7 @@ function viewData() {
   const s = app.state.settings;
   const rows = app.data.indicators.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.unit)}</td><td>${esc(i.hazard)}</td><td>${i.verified ? pill("green", "Source checked") : pill("verify", "Pending check")}</td></tr>`).join("");
   return `<section class="view data-view">
-    <div class="view-head" ${stagger(0)}><div><p class="kicker">Sources</p><h1>Data you can <span class="accent">trace</span></h1></div></div>
+    ${head("data", { meta: ["References", "Settings", "Crew access"], title: "Data you can <em>trace</em>" })}
     <div class="data-grid">
       <div class="panel" ${stagger(1)}>
         <h2>What each label means</h2>
@@ -594,41 +628,60 @@ function viewData() {
         <div class="form-actions"><button class="btn" type="submit">Save settings</button><span class="saved muted" aria-live="polite"></span></div>
       </form>
       <div class="panel" ${stagger(5)}>
+        <span class="card-code" aria-hidden="true">LOG</span>
         <h2>Your log</h2>
         <p class="muted">Everything is stored only in this browser, so the app works without a connection to Earth.</p>
         <div class="form-actions"><button class="btn ghost" data-reload-demo>Load the demo mission</button><button class="btn ghost danger" data-clear>Start an empty log</button></div>
         <p class="confirm-line" hidden><span>This deletes every reading in this browser.</span><button class="btn tiny danger" data-clear-yes>Delete</button><button class="btn tiny ghost" data-clear-no>Keep</button></p>
       </div>
     </div>
+    ${accessPanel()}
     <p class="disclaimer">CrewCheck is a prototype for the NASA Space Apps Challenge 2026. It is not a medical device and does not replace a doctor or flight surgeon.</p>
   </section>`;
 }
 
-/* ---------- Shell: HUD, dock, router ---------- */
+function accessPanel() {
+  const saved = fingerprintSaved();
+  const bio = saved
+    ? `<button class="btn tiny ghost danger" data-access="remove-bio">Remove fingerprint</button>`
+    : app.bio ? `<button class="btn tiny ghost" data-access="add-bio">Add fingerprint</button>` : "";
+  return `<div class="panel" ${stagger(6)}>
+    <span class="card-code" aria-hidden="true">ACCESS</span>
+    <h2>Crew access</h2>
+    <ul class="access-list">
+      <li><div><strong>Crew code</strong><span class="muted">Four digits. Only a salted hash is stored, never the code.</span></div><button class="btn tiny ghost" data-access="change">Change code</button></li>
+      <li><div><strong>Fingerprint</strong><span class="muted">${saved ? "Saved on this device. The print itself never leaves the reader." : app.bio ? "Not set up. Open the file with your thumb instead of the code." : "Not available in this browser or on this device."}</span></div>${bio}</li>
+      <li><div><strong>Lock the file</strong><span class="muted">Closes the cover. Your code or thumb opens it again.</span></div><button class="btn tiny" data-access="lock">Lock now</button></li>
+    </ul>
+    <p class="saved" id="access-msg" aria-live="polite"></p>
+  </div>`;
+}
+
+/* ---------- Shell: masthead, tabs, router ---------- */
 
 function updateHud() {
   const place = PLACES[app.state.settings.place];
-  $("#mission-chip").textContent = `${app.state.settings.name} · ${place.name} · day ${lastDay()}`;
+  $("#mast-crew").textContent = app.state.settings.name;
+  $("#mast-place").textContent = place.name;
+  $("#mast-day").textContent = String(lastDay()).padStart(3, "0");
   const latest = [...app.days].reverse().map((d) => d.results.heart_rate).find((r) => r?.trust === "ok");
   const hr = latest?.num ?? 70;
   $("#hud-hr").textContent = latest ? Math.round(hr) : "--";
   $("#hud-pulse").style.setProperty("--beat", `${((2 * 60) / hr).toFixed(2)}s`);
 }
 
-function moveDockGlow() {
-  const active = document.querySelector('.dock-item[aria-current="page"]');
-  const glow = $(".dock-glow");
-  if (!active || !glow) return;
-  glow.style.setProperty("--x", `${active.offsetLeft}px`);
-  glow.style.setProperty("--y", `${active.offsetTop}px`);
-  glow.style.setProperty("--w", `${active.offsetWidth}px`);
-  glow.style.setProperty("--h", `${active.offsetHeight}px`);
+// The station keeps Greenwich Mean Time, so the masthead clock does too.
+function tickClock() {
+  const t = new Date();
+  const el = $("#mast-clock");
+  el.textContent = `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`;
+  el.dateTime = t.toISOString();
 }
 
 function render({ animate = true } = {}) {
   const view = app.ui.view;
-  document.querySelectorAll(".dock-item").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === `#${view}` ? "page" : "false"));
-  moveDockGlow();
+  document.querySelectorAll(".tab").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === `#${view}` ? "page" : "false"));
+  document.body.dataset.view = view;
   updateHud();
   const root = $("#view");
   root.innerHTML = { today: viewToday, checkin: viewCheckin, trends: viewTrends, future: viewFuture, data: viewData }[view]();
@@ -656,33 +709,31 @@ function route() {
 }
 
 function hover(system, on) {
-  const screen = document.querySelector(".holo");
+  const screen = document.querySelector(".drawing");
   if (screen) screen.dataset.hot = on ? system : "";
 }
 
 function bindEvents() {
   window.addEventListener("hashchange", route);
-  window.addEventListener("resize", moveDockGlow);
   const root = $("#view");
-  bindTilt(root);
-  bindSpotlight(root);
+  document.querySelector("[data-lock]").addEventListener("click", () => app.gate.lock());
 
   root.addEventListener("pointerover", (e) => {
-    const t = e.target.closest(".holo [data-system]");
+    const t = e.target.closest(".drawing [data-system]");
     if (t) hover(t.dataset.system, true);
   });
   root.addEventListener("pointerout", (e) => {
-    const t = e.target.closest(".holo [data-system]");
+    const t = e.target.closest(".drawing [data-system]");
     if (t && !t.contains(e.relatedTarget)) hover(t.dataset.system, false);
   });
   root.addEventListener("focusin", (e) => { const t = e.target.closest(".callout"); if (t) hover(t.dataset.system, true); });
   root.addEventListener("focusout", (e) => { const t = e.target.closest(".callout"); if (t) hover(t.dataset.system, false); });
 
   root.addEventListener("click", (e) => {
-    const t = e.target.closest("button, .holo .zone");
+    const t = e.target.closest("button, .drawing .zone");
     if (!t) return;
     const d = t.dataset;
-    const inToday = t.closest('.holo[data-mode="today"]');
+    const inToday = t.closest('.drawing[data-mode="today"]');
     if (d.dayStep) { app.ui.day = Math.min(lastDay(), Math.max(app.days[0].day, app.ui.day + Number(d.dayStep))); render({ animate: false }); }
     else if (d.hazard) { app.ui.hazard = app.ui.hazard === d.hazard ? null : d.hazard; render({ animate: false }); }
     else if (d.stormReplay) { app.ui.storm = app.sw.archive.find((x) => x.id === d.stormReplay) ?? null; render({ animate: false }); }
@@ -700,6 +751,7 @@ function bindEvents() {
     else if (d.reloadDemo !== undefined) { reloadDemo(); }
     else if (d.clear !== undefined) { $(".confirm-line").hidden = false; }
     else if (d.clearNo !== undefined) { $(".confirm-line").hidden = true; }
+    else if (d.access) { access(d.access, t); }
     else if (d.clearYes !== undefined) { app.state.entries = []; persist(); app.ui.day = null; go("today"); }
   });
 
@@ -771,6 +823,34 @@ async function fetchSpaceWeather() {
   if (app.ui.view === "today") render({ animate: false });
 }
 
+async function access(what, btn) {
+  const msg = (text) => { const m = $("#access-msg"); if (m) m.textContent = text; };
+  if (what === "lock") return app.gate.lock();
+  if (what === "change") { await app.gate.changeCode(); return; }
+  if (what === "remove-bio") { forgetFingerprint(); render({ animate: false }); return msg("Fingerprint removed. Use your code."); }
+  if (what === "add-bio") {
+    btn.disabled = true;
+    try {
+      await enrolFingerprint(app.state.settings.name);
+      render({ animate: false });
+      msg("Fingerprint saved. Next time, hold your thumb on the dial.");
+    } catch (err) {
+      btn.disabled = false;
+      msg(err?.name === "NotAllowedError" ? "Fingerprint cancelled." : "The fingerprint could not be saved on this device.");
+    }
+  }
+}
+
+// "Forgot your code": nothing can be recovered, so start the file again.
+function resetAll() {
+  try {
+    localStorage.removeItem("crewcheck.v1");
+    localStorage.removeItem("crewcheck.access");
+    sessionStorage.removeItem("crewcheck.unlocked");
+  } catch { /* storage blocked */ }
+  location.reload();
+}
+
 async function reloadDemo() {
   app.state.entries = await loadDemo();
   app.ui.day = null;
@@ -790,9 +870,21 @@ async function start() {
     app.ui.futureDay = mission?.days ?? 180;
     recompute();
     saveState(app.state);
+    $("#mast-patch").innerHTML = patchSVG();
+    tickClock();
+    setInterval(tickClock, 15000);
+    app.bio = await fingerprintAvailable();
+    app.gate = createGate({
+      host: $("#gate"),
+      app: $("#app"),
+      crew: () => ({ crewName: app.state.settings.name, place: PLACES[app.state.settings.place].name, day: lastDay() }),
+      onOpen: () => { app.pulse?.close(); render(); },
+      onReset: resetAll,
+    });
     bindEvents();
     route();
     fetchSpaceWeather();
+    if (!isUnlocked()) await app.gate.run();
   } catch (err) {
     $("#view").innerHTML = `<section class="view"><div class="panel"><h2>The app could not start</h2><p>${esc(err.message)}. Open it from a web server (for example GitHub Pages or <code>npm start</code>), not by double-clicking the file.</p></div></section>`;
   }

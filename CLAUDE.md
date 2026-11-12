@@ -13,16 +13,20 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 
 | File | Role |
 | --- | --- |
-| `index.html` | Shell: aurora background, dock navigation, HUD with live ECG |
-| `css/styles.css` | Design tokens (light and dark), all components and animations |
+| `index.html` | Shell: masthead (patch, data plate, GMT clock, pulse strip, Lock), binder page, index tabs, gate host |
+| `css/styles.css` | "Flight Data File" design tokens (day shift and night cabin), all components, the cover, print styles |
+| `js/auth.js` | Crew access, pure and tested: code rules, PBKDF2 hash, wrong-try lockout, WebAuthn assertion check |
+| `js/gate.js` | Login screen: the binder cover with the combination dial and the fingerprint thumb plate |
+| `js/brand.js` | The mission patch logo (SVG) |
 | `js/main.js` | Views (`#today`, `#checkin`, `#trends`, `#future`, `#data`), router, events |
 | `js/rules.js` | Pure health rules: missing → plausible → camera signal quality → jump → ranges → personal baseline → streak |
 | `js/ppg.js` | Camera heart rate signal processing (pure, tested): resample, band-pass, peaks, quality score |
 | `js/camera.js` | Camera heart-rate sheet: `getUserMedia`, torch, finger detection, live waveform |
 | `js/forecast.js` | Future body projection (bone loss = published monthly rate × months) |
 | `js/hazards.js` | The five NASA hazards, mission dose, career band, storm alert |
-| `js/body.js` | Holographic body (SVG slices, scan beam, zones, callouts) |
-| `js/charts.js`, `js/fx.js` | SVG charts; count-up, tilt, sparkline, status ring, timelapse |
+| `js/body.js` | Body as a technical drawing (outline, centre line, hatch patterns per status, numbered balloons) |
+| `js/charts.js`, `js/fx.js` | SVG charts; count-up, sparkline, timelapse |
+| `fonts/` | Big Shoulders, Atkinson Hyperlegible Next, Martian Mono (OFL), self-hosted so the app works offline |
 | `js/store.js` | Loading data, CSV parsing, localStorage |
 | `data/*.json`, `data/mission_demo.csv` | All medical content and sources; the team edits these, not the code |
 
@@ -31,18 +35,20 @@ Live site: GitHub Pages from `main` (`https://juancarlosqo.github.io/crewcheck/`
 - **No invented numbers.** A value shown as fact needs a source in `data/` and in `docs/DATA_SOURCES.md`. Without one it is shown as "Pending check" or "No number yet". App-chosen thresholds are labelled as app rules.
 - **Measurement before health.** Impossible values and sudden jumps become "Measure again", never an alarm.
 - **Demo data is labelled** as demo and never mixed with real data.
-- **Design identity:** "med bay" — frosted glass over aurora light, dark holographic screens, Unbounded + Sora, aqua for the scanner, coral for time. Status colours always come with a word. Respect `prefers-reduced-motion`.
+- **Design identity:** "Flight Data File" — the app is the crew's own binder of printed procedures: warm paper with grain, punched page with index tabs, ink drawings, International Orange for actions, ECG paper for charts, Big Shoulders + Atkinson Hyperlegible Next + Martian Mono. Status always has a word and a shape as well as a colour. Respect `prefers-reduced-motion`. Full rationale in `docs/DESIGN.md`; keep new UI inside it (no glass, glow or gradients-for-decoration).
+- **Crew access:** the app opens behind a binder cover with a 4-digit code (stored only as a salted PBKDF2 hash) and an optional fingerprint (WebAuthn platform authenticator, checked on the device). It is a device lock, not encryption: say so honestly wherever it comes up. Fingerprint only works over https on a device with a reader.
 - Commits end with the Co-Authored-By line for Claude. `docs/AI_USE.md` records AI use for the submission form; keep it accurate.
 
 ## Status (11 November 2026)
 
-Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, camera heart rate (code done and tested with a simulated camera; still to test on real phones), 39 passing tests.
+Done: daily log, body scan with callouts, mission strip, status ring, tiles with sparklines, trends, Future body with timelapse and porous bones, five hazards row, radiation (dosimeter input, 600 mSv career limit, NASA DONKI live + archive, real storm replay), sources page, camera heart rate (code done and tested with a simulated camera; still to test on real phones), full redesign as a Flight Data File with crew access login (code + fingerprint), 49 passing tests.
 
 ## Next tasks
 
-1. **Camera heart-rate input — built, needs real-phone testing.** Test on Android Chrome and iPhone Safari over GitHub Pages; compare against a finger sensor and tune `heart_rate.camera.minQuality` and `isFingerFrame` if needed. Original brief: in the Log view, a "Measure with camera" button for heart rate: fingertip over the phone camera with the torch on, read the red-channel brightness from `getUserMedia` frames, band-pass and count peaks over about 20 seconds (photoplethysmography). Show a live waveform on a holo screen, a signal-quality score, and send the result through the normal rules so a poor signal ends as "Measure again". Label it as an estimate that is less accurate than a medical sensor. It cannot run inside the claude.ai artifact preview (camera blocked), only on GitHub Pages over https; test on a real phone.
-2. Load the research team's verified ranges into `data/indicators.json` (set `verified: true` and `source`) and their projection rates into `data/forecast.json` (`effectFactor`, muscle rate).
-3. Replace `DEMO_KEY` in `fetchSpaceWeather` (`js/main.js`) with the team's own free key from api.nasa.gov.
-4. Confirm with the local event whether code written before 14 November is allowed; if not, the hackathon build starts in a fresh repository.
+1. **Camera heart-rate input — built, needs real-phone testing.** Test on Android Chrome and iPhone Safari over GitHub Pages; compare against a finger sensor and tune `heart_rate.camera.minQuality` and `isFingerFrame` if needed. Original brief: in the Log view, a "Measure with camera" button for heart rate: fingertip over the phone camera with the torch on, read the red-channel brightness from `getUserMedia` frames, band-pass and count peaks over about 20 seconds (photoplethysmography). Show a live waveform on ECG paper, a signal-quality score, and send the result through the normal rules so a poor signal ends as "Measure again". Label it as an estimate that is less accurate than a medical sensor. It cannot run inside the claude.ai artifact preview (camera blocked), only on GitHub Pages over https; test on a real phone.
+2. **Test the login on real phones** over GitHub Pages: set a code, add the fingerprint, lock, open with the thumb. Check iPhone (Face ID / Touch ID) and Android.
+3. Load the research team's verified ranges into `data/indicators.json` (set `verified: true` and `source`) and their projection rates into `data/forecast.json` (`effectFactor`, muscle rate).
+4. Replace `DEMO_KEY` in `fetchSpaceWeather` (`js/main.js`) with the team's own free key from api.nasa.gov.
+5. Confirm with the local event whether code written before 14 November is allowed; if not, the hackathon build starts in a fresh repository.
 
 Team guide (Spanish), roles and calendar: the "Guía del equipo — Monitor de salud para astronautas" doc in claude.ai.

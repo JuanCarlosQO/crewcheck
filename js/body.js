@@ -1,11 +1,14 @@
-// Holographic body scan. The body is drawn as horizontal "slices" (like a
-// medical scanner) inside a dark screen. Each system is a glowing zone under
-// the slices, with a callout label beside the body connected by a leader line.
+// Crew member figure, drawn like a sheet from an engineering drawing set: ink
+// outline, a dash-dot centre line, corner marks, and numbered
+// balloons that point at each body system. A system's status is shown three
+// ways at once: its colour, its hatch pattern (none, diagonal, cross, dots)
+// and the word in its balloon, so it reads in print, in the dark and for
+// colour-blind crew.
 //
 // mode "today":  daily systems (mind, lungs, heart, metabolism, body, bones)
 // mode "future": bones, muscles, heart, eyes and mind for the projection
 
-const OX = 110; // the figure is drawn around x = 100 and shifted into a 420-wide screen
+const OX = 110; // the figure is drawn around x = 100 and shifted into a 420-wide sheet
 const OY = 12;
 
 const SILHOUETTE = `M100 14 a30 30 0 1 1 -0.1 0 z
@@ -14,16 +17,16 @@ const SILHOUETTE = `M100 14 a30 30 0 1 1 -0.1 0 z
   C108 404 130 404 130 392 L134 226 L134 122 L144 202 C146 216 160 214 158 200
   L146 102 C140 88 124 86 110 84 L110 72 Z`;
 
-// Zone shapes in figure coordinates, and where each callout sits.
+// Zone shapes in figure coordinates, and where each balloon points.
 const ZONES = {
-  mind:       { label: "Mind & sleep",        shape: `<ellipse cx="100" cy="40" rx="20" ry="17"/>`, anchor: [84, 40], side: "left" },
-  eyes:       { label: "Eyes & brain",        shape: `<circle cx="91" cy="56" r="5"/><circle cx="109" cy="56" r="5"/>`, anchor: [114, 56], side: "right" },
-  lungs:      { label: "Lungs & breathing",   shape: `<ellipse cx="86" cy="126" rx="15" ry="27"/><ellipse cx="114" cy="126" rx="15" ry="27"/>`, anchor: [74, 126], side: "left" },
-  heart:      { label: "Heart & circulation", shape: `<circle cx="104" cy="132" r="12"/>`, anchor: [116, 132], side: "right" },
-  metabolism: { label: "Blood sugar & energy", shape: `<ellipse cx="98" cy="176" rx="22" ry="13"/>`, anchor: [77, 176], side: "left" },
+  mind:       { label: "Mind & sleep",          shape: `<ellipse cx="100" cy="40" rx="20" ry="17"/>`, anchor: [84, 40], side: "left" },
+  eyes:       { label: "Eyes & brain",          shape: `<circle cx="91" cy="56" r="5"/><circle cx="109" cy="56" r="5"/>`, anchor: [114, 56], side: "right" },
+  lungs:      { label: "Lungs & breathing",     shape: `<ellipse cx="86" cy="126" rx="15" ry="27"/><ellipse cx="114" cy="126" rx="15" ry="27"/>`, anchor: [74, 126], side: "left" },
+  heart:      { label: "Heart & circulation",   shape: `<path d="M104 146 c-14 -9 -16 -18 -9 -22 c4 -2 7 0 9 3 c2 -3 5 -5 9 -3 c7 4 5 13 -9 22 z"/>`, anchor: [116, 132], side: "right" },
+  metabolism: { label: "Blood sugar & energy",  shape: `<ellipse cx="98" cy="176" rx="22" ry="13"/>`, anchor: [77, 176], side: "left" },
   body:       { label: "Whole body & immunity", shape: `<path d="${SILHOUETTE}"/>`, anchor: [150, 196], side: "right" },
-  bones:      { label: "Bones & muscle",      shape: "", anchor: [118, 300], side: "right" },
-  muscle:     { label: "Muscles",             shape: `<ellipse cx="81" cy="286" rx="11" ry="36"/><ellipse cx="119" cy="286" rx="11" ry="36"/>`, anchor: [70, 286], side: "left" },
+  bones:      { label: "Bones & muscle",        shape: "", anchor: [118, 300], side: "right" },
+  muscle:     { label: "Muscles",               shape: `<ellipse cx="81" cy="286" rx="11" ry="36"/><ellipse cx="119" cy="286" rx="11" ry="36"/>`, anchor: [70, 286], side: "left" },
 };
 
 const SKELETON = `
@@ -40,69 +43,49 @@ const LAYOUT = {
 };
 
 export function systemsFor(mode) {
-  return LAYOUT[mode].systems.map((id) => ({ id, label: LAYOUT[mode].labels[id] ?? ZONES[id].label, side: ZONES[id].side, anchor: ZONES[id].anchor }));
+  // Balloons are numbered top to bottom, the way a drawing's parts list reads.
+  return LAYOUT[mode].systems
+    .map((id) => ({ id, label: LAYOUT[mode].labels[id] ?? ZONES[id].label, side: ZONES[id].side, anchor: ZONES[id].anchor }))
+    .sort((a, b) => a.anchor[1] - b.anchor[1])
+    .map((s, i) => ({ ...s, n: i + 1 }));
 }
 
-function slices() {
-  let s = "";
-  for (let y = 14; y <= 406; y += 5) s += `M30 ${y} H170 `;
-  return s;
-}
+const PATTERNS = `
+  <pattern id="h-yellow" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="hb" width="7" height="7"/><line class="hl" x1="0" y1="0" x2="0" y2="7"/></pattern>
+  <pattern id="h-red" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="hb" width="6" height="6"/><path class="hl" d="M0 0V6M0 0H6"/></pattern>
+  <pattern id="h-verify" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="hb" width="6" height="6"/><circle class="hd" cx="3" cy="3" r="1"/></pattern>
+  <pattern id="h-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line class="hl" x1="0" y1="0" x2="0" y2="8" stroke-dasharray="2 2"/></pattern>`;
 
 /**
- * Returns the SVG for the screen. Callout buttons are added as HTML by the
- * caller (calloutsHTML), so their text stays sharp and readable on phones.
+ * The sheet's SVG. Balloon labels are HTML (calloutsHTML) so their text stays
+ * sharp and wraps on phones.
  */
-export function holoSVG(mode = "today") {
+export function figureSVG(mode = "today") {
   const list = systemsFor(mode);
   const zones = list
     .filter((s) => ZONES[s.id].shape)
     .map((s) => `<g class="zone" data-system="${s.id}">${ZONES[s.id].shape}</g>`)
     .join("");
-  const glows = list
-    .filter((s) => ZONES[s.id].shape && s.id !== "body")
-    .map((s) => `<g class="zone" data-system="${s.id}">${ZONES[s.id].shape}</g>`)
-    .join("");
 
-  // Leader lines go from the zone to the callout column (x 128 / 292 in screen units).
+  // Leaders run from a dot on the zone to the balloon column (x 122 / 298).
   const leads = list.map((s) => {
     const [ax, ay] = s.anchor;
     const x = ax + OX, y = ay + OY;
-    const edge = s.side === "left" ? 118 : 302;
-    const mid = s.side === "left" ? Math.min(x - 14, 150) : Math.max(x + 14, 270);
-    return `<path class="lead" data-system="${s.id}" d="M${x} ${y} L${mid} ${y} L${edge} ${y}"/><circle class="lead-dot" data-system="${s.id}" cx="${x}" cy="${y}" r="2.6"/>`;
+    const edge = s.side === "left" ? 122 : 298;
+    const knee = s.side === "left" ? Math.min(x - 16, 150) : Math.max(x + 16, 270);
+    return `<path class="lead" data-system="${s.id}" d="M${x} ${y} L${knee} ${y} L${edge} ${y}"/><circle class="lead-dot" data-system="${s.id}" cx="${x}" cy="${y}" r="2.4"/>`;
   }).join("");
 
-  return `<svg class="holo-svg" viewBox="0 0 420 440" aria-hidden="true">
-    <defs>
-      <clipPath id="clip-${mode}"><path d="${SILHOUETTE}" transform="translate(${OX} ${OY})"/></clipPath>
-      <linearGradient id="beam-${mode}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="var(--holo)" stop-opacity="0"/>
-        <stop offset="0.85" stop-color="var(--holo)" stop-opacity="0.45"/>
-        <stop offset="1" stop-color="var(--holo)" stop-opacity="0.95"/>
-      </linearGradient>
-      <filter id="glow-${mode}" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7"/></filter>
-      <pattern id="hatch-${mode}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" class="hatch-line"/></pattern>
-    </defs>
-
-    <g class="rings">
-      <ellipse class="ring r1" cx="210" cy="230" rx="150" ry="34"/>
-      <ellipse class="ring r2" cx="210" cy="230" rx="118" ry="24"/>
-    </g>
-
+  return `<svg class="fig" viewBox="0 0 420 440" aria-hidden="true">
+    <defs>${PATTERNS}</defs>
+    <line class="centre" x1="210" y1="6" x2="210" y2="434"/>
     <g transform="translate(${OX} ${OY})">
-      <g class="glows" filter="url(#glow-${mode})">${glows}</g>
-      <g clip-path="url(#clip-${mode})">
-        <path class="slices" d="${slices()}"/>
-        <g class="scan"><rect x="30" y="-60" width="140" height="60" fill="url(#beam-${mode})"/></g>
-      </g>
-      <path class="outline" d="${SILHOUETTE}"/>
+      <path class="silhouette" d="${SILHOUETTE}" pathLength="1"/>
       <g class="zones">${zones}</g>
       <g class="zone skeleton" data-system="bones">${SKELETON}</g>
     </g>
-
     <g class="leads">${leads}</g>
-    <line class="scanline" x1="20" x2="400" y1="0" y2="0"/>
+    <g class="corner" aria-hidden="true"><path d="M8 20 V8 H20 M412 20 V8 H400 M8 420 V432 H20 M412 420 V432 H400"/></g>
   </svg>`;
 }
 
@@ -112,8 +95,8 @@ export function calloutsHTML(mode, info) {
     const i = info[s.id] ?? { status: "missing", label: "", detail: "" };
     const top = ((s.anchor[1] + OY) / 440) * 100;
     return `<button class="callout ${s.side} s-${i.status}" data-system="${s.id}" style="top:${top.toFixed(2)}%">
-      <span class="c-dot"></span>
-      <span class="c-text"><span class="c-name">${s.label}</span><span class="c-state">${i.label}</span>${i.detail ? `<span class="c-detail">${i.detail}</span>` : ""}</span>
+      <span class="c-num" aria-hidden="true">${s.n}</span>
+      <span class="c-text"><span class="c-name">${s.label}</span><span class="c-state"><i class="g" aria-hidden="true"></i>${i.label}</span>${i.detail ? `<span class="c-detail">${i.detail}</span>` : ""}</span>
     </button>`;
   }).join("");
 }

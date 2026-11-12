@@ -1,6 +1,6 @@
-// Visual effects: number count-up, tilt with light sheen, pointer spotlight,
-// small SVG helpers (sparkline, status ring) and the timelapse player.
-// Every effect turns itself off when the person asks for reduced motion.
+// Motion and small drawings: the number counter, the sparkline drawn like a
+// pen trace, and the timelapse player. Every effect turns itself off when the
+// person asks for reduced motion.
 
 export const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -24,39 +24,6 @@ export function countUp(root) {
   });
 }
 
-/** Cards with .tilt lean toward the pointer and show a moving sheen. */
-export function bindTilt(root) {
-  root.addEventListener("pointermove", (e) => {
-    const card = e.target.closest(".tilt");
-    if (!card || reduceMotion() || e.pointerType === "touch") return;
-    const r = card.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width;
-    const y = (e.clientY - r.top) / r.height;
-    card.style.setProperty("--rx", `${(0.5 - y) * 7}deg`);
-    card.style.setProperty("--ry", `${(x - 0.5) * 9}deg`);
-    card.style.setProperty("--mx", `${x * 100}%`);
-    card.style.setProperty("--my", `${y * 100}%`);
-  });
-  root.addEventListener("pointerout", (e) => {
-    const card = e.target.closest(".tilt");
-    if (card && !card.contains(e.relatedTarget)) {
-      card.style.setProperty("--rx", "0deg");
-      card.style.setProperty("--ry", "0deg");
-    }
-  });
-}
-
-/** Screens with .spot get a soft light that follows the pointer. */
-export function bindSpotlight(root) {
-  root.addEventListener("pointermove", (e) => {
-    const s = e.target.closest(".spot");
-    if (!s) return;
-    const r = s.getBoundingClientRect();
-    s.style.setProperty("--sx", `${e.clientX - r.left}px`);
-    s.style.setProperty("--sy", `${e.clientY - r.top}px`);
-  });
-}
-
 /** Tiny line chart for a tile. values: numbers or null. */
 export function sparkline(values, statusList) {
   const W = 240, H = 46, P = 4;
@@ -73,18 +40,6 @@ export function sparkline(values, statusList) {
     <path class="spark-line" d="${d}" pathLength="1"/>
     <circle class="spark-end s-${last.s}" cx="${X(last.i).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="3"/>
   </svg>`;
-}
-
-/** Ring with one segment per indicator, coloured by status. */
-export function statusRing(statuses) {
-  const R = 52, C = 2 * Math.PI * R, n = statuses.length, gap = 0.012;
-  const seg = 1 / n;
-  const arcs = statuses.map((s, i) => {
-    const len = (seg - gap) * C;
-    const off = -(i * seg) * C;
-    return `<circle class="ring-seg s-${s}" cx="64" cy="64" r="${R}" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" style="--i:${i}"/>`;
-  }).join("");
-  return `<svg class="status-ring" viewBox="0 0 128 128" aria-hidden="true"><circle class="ring-track" cx="64" cy="64" r="${R}"/><g transform="rotate(-90 64 64)">${arcs}</g></svg>`;
 }
 
 /** Animate a number from `from` to `to`, calling onFrame each frame. Returns a stop function. */
