@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Earthlight — crew access</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:Manrope,system-ui,sans-serif}
+a{color:#f4c27a}a:hover{color:#ffe0ad}
+@keyframes orbit{to{offset-distance:100%}}
+@keyframes breathe{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes sunrise{0%{opacity:0;transform:translateX(-50%) scale(.4)}100%{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes twinkle{0%,100%{opacity:.4}50%{opacity:.9}}
+@keyframes drift{from{transform:translateX(-50%) rotate(0deg)}to{transform:translateX(-50%) rotate(-6deg)}}
+.ekey{transition:background .25s, color .25s}
+.ekey:hover{background:rgba(255,255,255,.05)}
+.ekey:active{background:rgba(244,194,122,.14);color:#f4c27a}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #02040b; color: #eef3ff; box-sizing: border-box; padding: 26px 28px 0; display: flex; flex-direction: column; align-items: center">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background-image: radial-gradient(1px 1px at 40px 120px, #fff 50%, transparent 51%), radial-gradient(1px 1px at 320px 80px, #fff 50%, transparent 51%), radial-gradient(1.2px 1.2px at 210px 260px, #dfe8ff 50%, transparent 51%), radial-gradient(1px 1px at 90px 380px, #fff 50%, transparent 51%), radial-gradient(1px 1px at 350px 420px, #fff 50%, transparent 51%), radial-gradient(1px 1px at 150px 60px, #fff 50%, transparent 51%); animation: twinkle 5s ease-in-out infinite"></div>
+
+  <div aria-hidden="true" style="position: absolute; left: 50%; top: 706px; width: 1300px; height: 1300px; border-radius: 50%; background: radial-gradient(circle at 50% 4%, #0d2347 0%, #061229 18%, #030915 40%); box-shadow: 0 -6px 30px rgba(96,160,255,.55), 0 -30px 90px rgba(60,120,255,.28), inset 0 10px 18px -6px rgba(140,190,255,.75); animation: drift 120s linear infinite alternate">
+    <div style="position: absolute; left: 47%; top: 3%; width: 6%; height: 1.4%; background-image: radial-gradient(1.3px 1.3px at 10px 6px, #ffd28a 50%, transparent 51%), radial-gradient(1px 1px at 30px 12px, #ffd28a 50%, transparent 51%), radial-gradient(1.4px 1.4px at 52px 5px, #ffe2b0 50%, transparent 51%), radial-gradient(1px 1px at 66px 14px, #ffd28a 50%, transparent 51%); opacity: .8"></div>
+  </div>
+  <sc-if value="{{ok}}" hint-placeholder-val="{{ false }}">
+    <div aria-hidden="true" style="position: absolute; left: 50%; top: 600px; width: 520px; height: 240px; border-radius: 50%; background: radial-gradient(ellipse at 50% 60%, rgba(255,214,150,.95) 0%, rgba(255,170,90,.45) 25%, rgba(255,140,60,0) 60%); transform-origin: 50% 70%; animation: sunrise 2.2s cubic-bezier(.2,.7,.2,1) both"></div>
+  </sc-if>
+
+  <div style="position: relative; width: 100%; display: flex; align-items: center; justify-content: space-between">
+    <span style="font-family: 'Instrument Serif', serif; font-size: 25px">CrewCheck</span>
+    <span style="font-size: 10.5px; font-weight: 600; letter-spacing: 2.2px; color: #8796b5">LOW EARTH ORBIT · DAY 30</span>
+  </div>
+
+  <div style="position: relative; width: 390px; height: 210px; margin: 6px -28px 0">
+    <svg width="390" height="210" viewBox="0 0 390 210" aria-hidden="true" style="position: absolute; inset: 0">
+      <path d="M -20 170 Q 195 -10 410 150" fill="none" stroke="rgba(244,194,122,.35)" stroke-width="1" stroke-dasharray="2 5"></path>
+    </svg>
+    <div style="position: absolute; left: 0; top: 0; offset-path: path('M -20 170 Q 195 -10 410 150'); animation: orbit 16s linear infinite; display: flex; align-items: center; gap: 6px">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #f4c27a; box-shadow: 0 0 10px #f4c27a"></span>
+      <span style="font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: #f4c27a">ISS</span>
+    </div>
+    <div style="position: absolute; left: 28px; right: 28px; top: 80px; animation: fade .8s ease-out both">
+      <p style="margin: 0; font-size: 15px; color: #8796b5">{{greeting}}</p>
+      <h1 style="margin: 2px 0 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 50px; line-height: 1">{{title}}</h1>
+    </div>
+  </div>
+
+  <div style="position: relative; width: 100%; display: flex; align-items: center; gap: 14px">
+    <sc-for list="{{dots}}" as="dot" hint-placeholder-count="4">
+      <span style="width: 10px; height: 10px; border-radius: 50%; border: 1.2px solid {{dot.border}}; background: {{dot.bg}}; box-shadow: {{dot.glow}}; transition: all .4s"></span>
+    </sc-for>
+    <span style="flex: 1; height: 1px; background: linear-gradient(90deg, rgba(135,150,181,.4), transparent)"></span>
+    <span style="font-size: 12px; color: #8796b5">{{hint}}</span>
+  </div>
+
+  <sc-if value="{{notOk}}" hint-placeholder-val="{{ true }}">
+    <div style="position: relative; margin-top: 26px; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 6px">
+      <sc-for list="{{keys}}" as="k" hint-placeholder-count="9">
+        <button type="button" class="ekey" onClick="{{k.press}}" aria-label="{{k.d}}" style="height: 64px; border-radius: 32px; border: 0; background: transparent; color: #eef3ff; font-family: Manrope, sans-serif; font-size: 30px; font-weight: 300; cursor: pointer">{{k.d}}</button>
+      </sc-for>
+      <button type="button" class="ekey" onClick="{{thumb}}" aria-label="Use fingerprint" style="height: 64px; border-radius: 32px; border: 0; background: transparent; color: #f4c27a; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <span style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid rgba(244,194,122,.6); display: flex; align-items: center; justify-content: center; animation: breathe 3s ease-in-out infinite">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M7 19c-1.5-2-2-4-2-7a7 7 0 0 1 14 0"></path><path d="M10 20c-1-2-1.5-4-1.5-7a3.5 3.5 0 0 1 7 0c0 2 .3 4 1 6"></path><path d="M13 21c-.8-2-1-4.5-1-8"></path></svg>
+        </span>
+      </button>
+      <button type="button" class="ekey" onClick="{{zero}}" aria-label="0" style="height: 64px; border-radius: 32px; border: 0; background: transparent; color: #eef3ff; font-family: Manrope, sans-serif; font-size: 30px; font-weight: 300; cursor: pointer">0</button>
+      <button type="button" class="ekey" onClick="{{back}}" aria-label="Delete last digit" style="height: 64px; border-radius: 32px; border: 0; background: transparent; color: #8796b5; cursor: pointer; font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500">Delete</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ok}}" hint-placeholder-val="{{ false }}">
+    <div style="position: relative; margin-top: 60px; width: 100%; display: flex; flex-direction: column; gap: 18px; animation: fade .8s ease-out .6s both">
+      <p style="margin: 0; font-family: 'Instrument Serif', serif; font-style: italic; font-size: 24px; color: #ffe0ad; line-height: 1.25">One of the sixteen sunrises you will see today. Your check-in is ready.</p>
+      <button type="button" onClick="{{reset}}" style="height: 56px; border-radius: 28px; border: 0; background: #f4c27a; color: #1a1205; font-family: Manrope, sans-serif; font-size: 16px; font-weight: 700; cursor: pointer">Continue</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { pin: "", ok: false, how: "" };
+  }
+  componentWillUnmount() { clearTimeout(this.t); }
+  renderVals() {
+    const { pin, ok, how } = this.state;
+    const press = (d) => () => {
+      if (this.state.ok) return;
+      const next = (this.state.pin + d).slice(0, 4);
+      this.setState({ pin: next });
+      if (next.length === 4) this.t = setTimeout(() => this.setState({ ok: true, how: "code" }), 400);
+    };
+    return {
+      ok: ok,
+      notOk: !ok,
+      greeting: ok ? (how === "thumb" ? "Fingerprint verified." : "Code verified.") : "Good evening,",
+      title: ok ? "Welcome back." : "Commander",
+      hint: ok ? "Unlocked" : "Enter your code",
+      dots: [0, 1, 2, 3].map((i) => {
+        const on = ok || i < pin.length;
+        return { bg: on ? "#f4c27a" : "transparent", border: on ? "#f4c27a" : "rgba(135,150,181,.7)", glow: on ? "0 0 10px rgba(244,194,122,.8)" : "none" };
+      }),
+      keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => ({ d: d, press: press(d) })),
+      zero: press("0"),
+      back: () => { if (!this.state.ok) this.setState({ pin: this.state.pin.slice(0, -1) }); },
+      thumb: () => this.setState({ ok: true, how: "thumb", pin: "" }),
+      reset: () => this.setState({ ok: false, pin: "", how: "" }),
+    };
+  }
+}
+</script>
+</body>
+</html>
