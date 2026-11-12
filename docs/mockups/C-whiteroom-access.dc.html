@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>White Room — crew access</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@300;400;500;700;900&amp;family=Red+Hat+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:'Red Hat Display',system-ui,sans-serif}
+a{color:#d13f00}a:hover{color:#8f2b00}
+@keyframes mer{from{transform:scaleX(1)}to{transform:scaleX(-1)}}
+@keyframes orbit{to{offset-distance:100%}}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes ring{from{stroke-dashoffset:600}to{stroke-dashoffset:0}}
+.wkey{transition:background .15s, color .15s}
+.wkey:hover{background:#f6f7f9}
+.wkey:active{background:#0c0d10;color:#ffffff}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #f2f3f5; color: #0c0d10; box-sizing: border-box; padding: 26px 24px 28px; display: flex; flex-direction: column">
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <span style="font-weight: 900; font-size: 17px; letter-spacing: 4px">CREWCHECK</span>
+    <span style="font-family: 'Red Hat Mono', monospace; font-size: 11px; color: #6b7280">ISS / DAY 030</span>
+  </div>
+
+  <div style="position: relative; align-self: center; margin-top: 26px; width: 240px; height: 240px">
+    <svg width="240" height="240" viewBox="0 0 240 240" aria-hidden="true" style="position: absolute; inset: 0">
+      <circle cx="120" cy="120" r="92" fill="#ffffff" stroke="#0c0d10" stroke-width="1.4"></circle>
+      <ellipse cx="120" cy="120" rx="92" ry="30" fill="none" stroke="#c9cdd4" stroke-width="1"></ellipse>
+      <ellipse cx="120" cy="88" rx="80" ry="22" fill="none" stroke="#dfe2e7" stroke-width="1"></ellipse>
+      <ellipse cx="120" cy="152" rx="80" ry="22" fill="none" stroke="#dfe2e7" stroke-width="1"></ellipse>
+      <ellipse cx="120" cy="120" rx="92" ry="92" fill="none" stroke="#9aa1ab" stroke-width="1" style="transform-origin: 120px 120px; animation: mer 8s linear infinite"></ellipse>
+      <ellipse cx="120" cy="120" rx="92" ry="92" fill="none" stroke="#9aa1ab" stroke-width="1" style="transform-origin: 120px 120px; animation: mer 8s linear -1.6s infinite"></ellipse>
+      <ellipse cx="120" cy="120" rx="92" ry="92" fill="none" stroke="#9aa1ab" stroke-width="1" style="transform-origin: 120px 120px; animation: mer 8s linear -3.2s infinite"></ellipse>
+      <ellipse cx="120" cy="120" rx="92" ry="92" fill="none" stroke="#9aa1ab" stroke-width="1" style="transform-origin: 120px 120px; animation: mer 8s linear -4.8s infinite"></ellipse>
+      <ellipse cx="120" cy="120" rx="92" ry="92" fill="none" stroke="#9aa1ab" stroke-width="1" style="transform-origin: 120px 120px; animation: mer 8s linear -6.4s infinite"></ellipse>
+      <path d="M120 20 V28 M120 212 V220 M20 120 H28 M212 120 H220" stroke="#0c0d10" stroke-width="1.2"></path>
+      <g transform="rotate(-24 120 120)">
+        <ellipse cx="120" cy="120" rx="116" ry="38" fill="none" stroke="{{orbitInk}}" stroke-width="{{orbitW}}" stroke-dasharray="{{orbitDash}}"></ellipse>
+      </g>
+    </svg>
+    <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 240px; height: 240px; transform: rotate(-24deg)">
+      <span style="position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%; background: #ff4f00; box-shadow: 0 0 0 4px rgba(255,79,0,.18); offset-path: path('M 4 120 a 116 38 0 1 0 232 0 a 116 38 0 1 0 -232 0'); animation: orbit 7s linear infinite"></span>
+    </div>
+  </div>
+
+  <div style="margin-top: 18px; animation: fade .6s ease-out both">
+    <p style="margin: 0; font-family: 'Red Hat Mono', monospace; font-size: 11px; letter-spacing: 1px; color: {{kickInk}}">{{kicker}}</p>
+    <h1 style="margin: 6px 0 0; font-weight: 300; font-size: 38px; line-height: 1.05; letter-spacing: -.5px">{{title}}</h1>
+  </div>
+
+  <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+    <sc-for list="{{segs}}" as="s" hint-placeholder-count="4">
+      <span style="height: 4px; background: #dfe2e7; position: relative; overflow: hidden"><span style="position: absolute; inset: 0; background: {{s.bg}}; transform-origin: left; transform: scaleX({{s.on}}); transition: transform .35s ease, background .4s"></span></span>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{notOk}}" hint-placeholder-val="{{ true }}">
+    <div style="margin-top: auto; border-radius: 24px; background: #ffffff; border: 1px solid #dfe2e7; overflow: hidden; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <sc-for list="{{keys}}" as="k" hint-placeholder-count="9">
+        <button type="button" class="wkey" onClick="{{k.press}}" aria-label="{{k.d}}" style="height: 66px; border: 0; border-right: 1px solid #eceef1; border-bottom: 1px solid #eceef1; background: #ffffff; color: #0c0d10; font-family: 'Red Hat Display', sans-serif; font-size: 27px; font-weight: 400; cursor: pointer">{{k.d}}</button>
+      </sc-for>
+      <button type="button" class="wkey" onClick="{{thumb}}" aria-label="Use fingerprint" style="height: 66px; border: 0; border-right: 1px solid #eceef1; background: #ffffff; color: #ff4f00; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M7 19c-1.5-2-2-4-2-7a7 7 0 0 1 14 0"></path><path d="M10 20c-1-2-1.5-4-1.5-7a3.5 3.5 0 0 1 7 0c0 2 .3 4 1 6"></path><path d="M13 21c-.8-2-1-4.5-1-8"></path><path d="M4.5 8.5A8.5 8.5 0 0 1 12 3.5a8.5 8.5 0 0 1 7.5 5"></path></svg>
+      </button>
+      <button type="button" class="wkey" onClick="{{zero}}" aria-label="0" style="height: 66px; border: 0; border-right: 1px solid #eceef1; background: #ffffff; color: #0c0d10; font-family: 'Red Hat Display', sans-serif; font-size: 27px; font-weight: 400; cursor: pointer">0</button>
+      <button type="button" class="wkey" onClick="{{back}}" aria-label="Delete last digit" style="height: 66px; border: 0; background: #ffffff; color: #6b7280; cursor: pointer; display: flex; align-items: center; justify-content: center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h11v14H9l-6-7z"></path><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"></path></svg>
+      </button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ok}}" hint-placeholder-val="{{ false }}">
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 14px; animation: fade .6s ease-out .3s both">
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #dfe2e7; border-radius: 16px; background: #ffffff; font-family: 'Red Hat Mono', monospace; font-size: 11px">
+        <span style="padding: 12px; border-right: 1px solid #eceef1"><span style="display: block; color: #6b7280">METHOD</span>{{method}}</span>
+        <span style="padding: 12px; border-right: 1px solid #eceef1"><span style="display: block; color: #6b7280">DEVICE</span>Local</span>
+        <span style="padding: 12px"><span style="display: block; color: #6b7280">STATUS</span><span style="color: #0a7f55">Verified</span></span>
+      </div>
+      <button type="button" onClick="{{reset}}" style="height: 60px; border-radius: 18px; border: 0; background: #0c0d10; color: #ffffff; font-family: 'Red Hat Display', sans-serif; font-size: 17px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; cursor: pointer">Open today's report<span style="width: 34px; height: 34px; border-radius: 50%; background: #ff4f00; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></span></button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { pin: "", ok: false, how: "" };
+  }
+  componentWillUnmount() { clearTimeout(this.t); }
+  renderVals() {
+    const { pin, ok, how } = this.state;
+    const press = (d) => () => {
+      if (this.state.ok) return;
+      const next = (this.state.pin + d).slice(0, 4);
+      this.setState({ pin: next });
+      if (next.length === 4) this.t = setTimeout(() => this.setState({ ok: true, how: "code" }), 450);
+    };
+    return {
+      ok: ok,
+      notOk: !ok,
+      kicker: ok ? "IDENTITY CONFIRMED" : "CREW ACCESS · " + pin.length + " OF 4",
+      kickInk: ok ? "#0a7f55" : "#ff4f00",
+      title: ok ? "Good to see you, Commander." : "Enter your crew code.",
+      method: how === "thumb" ? "Fingerprint" : "Code",
+      orbitInk: ok ? "#ff4f00" : "#0c0d10",
+      orbitW: ok ? 2 : 1,
+      orbitDash: ok ? "none" : "3 5",
+      segs: [0, 1, 2, 3].map((i) => ({ on: ok || i < pin.length ? 1 : 0, bg: ok ? "#0a7f55" : "#ff4f00" })),
+      keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => ({ d: d, press: press(d) })),
+      zero: press("0"),
+      back: () => { if (!this.state.ok) this.setState({ pin: this.state.pin.slice(0, -1) }); },
+      thumb: () => this.setState({ ok: true, how: "thumb", pin: "" }),
+      reset: () => this.setState({ ok: false, pin: "", how: "" }),
+    };
+  }
+}
+</script>
+</body>
+</html>
